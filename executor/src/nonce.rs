@@ -1,8 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
-/// Last used nonce per access key; one executor key, so keyed by account. The guard
-/// serializes txs on that key; `None` = refetch from chain.
+/// Last nonce per access key (one executor key, so keyed by account); `None` = refetch.
 // shortcut: in-process only; replicas need a shared lock (pg advisory) before scaling out
 #[derive(Default)]
 pub struct Nonces(Mutex<HashMap<String, Arc<Mutex<Option<u64>>>>>);
