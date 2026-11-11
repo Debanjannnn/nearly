@@ -89,8 +89,9 @@ func dense(m map[string]float64, start time.Time, n int) []float64 {
 
 // Run validates nothing about tokens: callers check the basket with planner.Validate first.
 func Run(in Input, s Series) (*Result, error) {
-	if !(in.Amount > 0) || in.From.After(in.To) || in.SwapBps < 0 {
-		return nil, &Error{"bad_request", "amount must be > 0, from <= to, swap_bps >= 0"}
+	// NaN/Inf or a cost >= 100% would make the result unencodable as JSON
+	if !(in.Amount > 0) || math.IsInf(in.Amount, 0) || in.From.After(in.To) || !(in.SwapBps >= 0 && in.SwapBps < 1e4) {
+		return nil, &Error{"bad_request", "amount must be finite > 0, from <= to, 0 <= swap_bps < 10000"}
 	}
 	legs := in.Basket.Legs
 	type req struct {

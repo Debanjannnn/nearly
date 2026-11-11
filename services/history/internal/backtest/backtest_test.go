@@ -100,8 +100,10 @@ func TestErrors(t *testing.T) {
 	if _, err := Run(in, Series{}); err == nil || err.(*Error).Code != "no_data" {
 		t.Fatalf("want no_data, got %v", err)
 	}
-	in.Amount = 0
-	if _, err := Run(in, Series{}); err == nil || err.(*Error).Code != "bad_request" {
-		t.Fatalf("want bad_request, got %v", err)
+	for _, bad := range []Input{{Amount: 0}, {Amount: math.Inf(1)}, {Amount: 1, SwapBps: 1e4}} {
+		bad.Basket, bad.From, bad.To = b, in.From, in.To
+		if _, err := Run(bad, Series{}); err == nil || err.(*Error).Code != "bad_request" {
+			t.Fatalf("%+v: want bad_request, got %v", bad, err)
+		}
 	}
 }
