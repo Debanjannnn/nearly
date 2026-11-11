@@ -40,3 +40,9 @@ history: ## run history
 
 client: ## run client
 	cd client && bun install && bun dev
+
+test: ## go vet + unit tests
+	go vet ./... && go test ./...
+
+test-integration: ## go tests against make infra postgres
+	DATABASE_URL=$${DATABASE_URL:-postgres://nearly:nearly@localhost:5432/nearly?sslmode=disable} go test -tags integration ./...
