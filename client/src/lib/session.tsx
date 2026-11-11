@@ -2,8 +2,9 @@
 
 import type { NearConnector } from "@hot-labs/near-connect";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { ApiError, createAccount, errText, postAuth, setToken } from "./api";
+import { ApiError, createAccount, errText, getMe, postAuth, postRevoke, setToken } from "./api";
 import { NETWORK, RPC_URL } from "./config";
+import type { KeyStatus } from "./types";
 
 // shared auth contract with the api (NEP-413)
 const LOGIN = { message: "nearly login", recipient: "nearly" } as const;
@@ -16,10 +17,12 @@ export type Session = {
   accountId: string | null; // connected wallet account
   account: string | null; // user's sub-account from the factory
   authenticated: boolean;
+  keyStatus: KeyStatus | null; // executor function-call key on the sub-account
   pending: boolean;
   error: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  revoke: () => Promise<void>;
 };
 
 const Ctx = createContext<Session | null>(null);
@@ -53,12 +56,28 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [s, setS] = useState<Saved | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
 
   const save = useCallback((next: Saved | null) => {
     setToken(next?.token ?? null);
     persist(next);
     setS(next);
+    if (!next?.token) setKeyStatus(null);
   }, []);
+
+  // key status lives on the api (revoke can happen from another device)
+  const token = s?.token ?? null;
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    getMe().then(
+      (me) => live && setKeyStatus(me.key_status),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [token]);
 
   // connector touches window/IndexedDB, so it is built client-side only
   useEffect(() => {
@@ -108,8 +127,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         save(cur);
       }
       if (!cur.account) {
-        const { account_id } = await createAccount();
-        save({ ...cur, account: account_id });
+        let r = await createAccount();
+        // api has no relayer: the owner signs the factory create_account tx, then we poll until the key lands
+        if (r.tx) await wallet.signAndSendTransaction(r.tx);
+        for (let i = 0; !r.account_id && i < 20; i++) {
+          await new Promise((ok) => setTimeout(ok, 1500));
+          r = await createAccount();
+        }
+        if (!r.account_id) throw new Error("Account still pending on chain, try again shortly.");
+        save({ ...cur, account: r.account_id });
+        setKeyStatus(r.key_status);
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401 && cur) save({ ...cur, token: null });
@@ -124,6 +151,44 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     save(null);
   }, [save]);
 
+  // owner signs revoke_executor (1 yocto, full-access key), then the api turns every schedule off
+  const revoke = useCallback(async () => {
+    const c = connector.current;
+    const sub = s?.account;
+    if (!c || !sub) return;
+    setPending(true);
+    setError(null);
+    try {
+      // a failed tx may mean it was revoked on chain already; the api check below decides
+      let txErr: unknown = null;
+      await c
+        .wallet()
+        .then((w) =>
+          w.signAndSendTransaction({
+            receiverId: sub,
+            actions: [{ type: "FunctionCall", params: { methodName: "revoke_executor", args: {}, gas: "30000000000000", deposit: "1" } }],
+          }),
+        )
+        .catch((e) => (txErr = e));
+      // key deletion is a receipt after the call; retry while the api still sees it
+      for (let i = 0; ; i++) {
+        try {
+          await postRevoke();
+          break;
+        } catch (e) {
+          if (!(e instanceof ApiError && e.message === "executor_key_active")) throw e;
+          if (txErr || i >= 10) throw txErr ?? e;
+          await new Promise((ok) => setTimeout(ok, 1500));
+        }
+      }
+      setKeyStatus("revoked");
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setPending(false);
+    }
+  }, [s]);
+
   return (
     <Ctx.Provider
       value={{
@@ -131,10 +196,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         accountId: s?.accountId ?? null,
         account: s?.account ?? null,
         authenticated: !!s?.token,
+        keyStatus,
         pending,
         error,
         login,
         logout,
+        revoke,
       }}
     >
       {children}

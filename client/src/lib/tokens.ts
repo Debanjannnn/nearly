@@ -18,6 +18,14 @@ export const TOKENS: Token[] = [
 export const tokenById = (id: string) => TOKENS.find((t) => t.id === id);
 export const tokenBySymbol = (symbol: string) => TOKENS.find((t) => t.symbol === symbol);
 
+// deployments token key ("usdc" | "wnear") helpers; baskets and holdings use keys
+export const KEYS = Object.keys(META);
+export const tokenIdOf = (key: string) => DEPLOYMENTS.tokens?.[key as "usdc" | "wnear"] ?? "";
+export const symbolOf = (key: string) => META[key]?.symbol ?? key.toUpperCase();
+export const decimalsOf = (key: string) => META[key]?.decimals ?? 24;
+// atoms → float units, for USD display math only
+export const toUnits = (raw: string | bigint, decimals: number) => Number(BigInt(raw)) / 10 ** decimals;
+
 // bigint-safe: rounds down to maxFrac digits, groups thousands
 export function fmtUnits(raw: bigint | string, decimals: number, maxFrac = 4): string {
   const v = BigInt(raw);
