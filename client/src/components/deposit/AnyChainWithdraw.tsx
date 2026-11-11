@@ -5,7 +5,7 @@ import { AnimatePresence } from "motion/react";
 import { Send } from "lucide-react";
 import { getLedgerBalance } from "@/lib/api";
 import { NETWORK } from "@/lib/config";
-import { useAsync, useDebounced } from "@/lib/hooks";
+import { useAsync, useDebounced, useHoldings } from "@/lib/hooks";
 import {
   chainName,
   eta,
@@ -26,21 +26,21 @@ import { useSession } from "@/lib/session";
 import { fmtUnits, parseAmount, TOKENS, type Token } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
 import { Button, ErrorBox, Row, Skeleton } from "@/components/ui";
-import { Chip, Field, inputCls, IntentDialog, IntentIcon, More, Trail, useIntent } from "./parts";
+import { Chip, fc, Field, inputCls, IntentDialog, IntentIcon, More, register, TestnetForm, TGAS, Trail, useIntent } from "./parts";
 
 type Pending = { q: IntentQuote; from: Token; amount: string; dest: IntentToken; recipient: string; owner: string; sub: string; withdrawn?: boolean; sent?: boolean };
 const KIND = "withdraw";
 const FTS = TOKENS.filter((t) => !!t.key);
-const TGAS = "000000000000";
-const STORAGE = "1250000000000000000000"; // 0.00125 NEAR, refunded if already registered
-
-const fc = (methodName: string, args: object, deposit: string, gas = `30${TGAS}`) => ({ type: "FunctionCall" as const, params: { methodName, args, gas, deposit } });
-const register = (account_id: string) => fc("storage_deposit", { account_id, registration_only: true }, STORAGE);
 
 // account.withdraw pays the owner, then the owner sends it to the 1Click deposit address
 const withdrawTxs = (p: Pending) => [
   { receiverId: p.from.address, actions: [register(p.owner), register(p.q.quote.depositAddress!)] },
   { receiverId: p.sub, actions: [fc("withdraw", { token: p.from.address, amount: p.amount }, "1", `100${TGAS}`)] },
+];
+// testnet: account.withdraw straight to the owner wallet
+const testnetTxs = (t: Token, raw: bigint, owner: string, sub: string) => [
+  { receiverId: t.address, actions: [register(owner)] },
+  { receiverId: sub, actions: [fc("withdraw", { token: t.address, amount: raw.toString() }, "1", `100${TGAS}`)] },
 ];
 const transferTx = (p: Pending) => ({
   receiverId: p.from.address,
@@ -67,8 +67,10 @@ export function AnyChainWithdrawButton({ className, children }: { className?: st
 
 export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   const { accountId, account, authenticated, send } = useSession();
-  const live = NETWORK === "mainnet" && authenticated && !!account && !!accountId;
-  const tokens = useAsync(live ? "intent-tokens" : null, getIntentTokens);
+  const live = authenticated && !!account && !!accountId;
+  const intents = live && NETWORK === "mainnet";
+  const tokens = useAsync(intents ? "intent-tokens" : null, getIntentTokens);
+  const holdings = useHoldings();
 
   const [fromId, setFromId] = useState(FTS[0]?.address);
   const [chain, setChain] = useState("base");
@@ -82,7 +84,7 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   const all = tokens.data ?? [];
   const from = FTS.find((t) => t.address === fromId);
   // Max = account ledger (get_balance), not ft_balance_of: withdraw only pays what the ledger holds
-  const ledger = useAsync(live && fromId ? `ledger:${account}:${fromId}` : null, () => getLedgerBalance(account!, fromId!));
+  const ledger = useAsync(intents && fromId ? `ledger:${account}:${fromId}` : null, () => getLedgerBalance(account!, fromId!));
   const bal = ledger.data ?? undefined;
   const chains = sortChains(all);
   const onChain = tokensOn(all, chain);
@@ -139,11 +141,17 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <IntentDialog title="Withdraw to any chain" subtitle="From your nearly account to an address on another chain" onClose={onClose}>
-      {NETWORK !== "mainnet" ? (
-        <p className="text-sm text-muted-foreground">NEAR Intents runs on mainnet only.</p>
-      ) : !live ? (
+    <IntentDialog title="Withdraw to any chain" subtitle={NETWORK === "mainnet" ? "From your nearly account to an address on another chain" : "From your nearly account back to your NEAR wallet"} onClose={onClose}>
+      {!live ? (
         <p className="text-sm text-muted-foreground">Connect your wallet first.</p>
+      ) : NETWORK !== "mainnet" ? (
+        <TestnetForm
+          verb="Withdraw"
+          note="Your wallet signs twice: storage registration on the token, then the withdraw to itself."
+          balanceOf={(t) => holdings.data?.tokens.find((x) => x.address === t.address)?.raw}
+          txs={(t, raw) => testnetTxs(t, raw, accountId!, account!)}
+          onDone={holdings.reload}
+        />
       ) : tokens.error ? (
         <ErrorBox message={`NEAR Intents unavailable: ${tokens.error}`} />
       ) : !tokens.data ? (

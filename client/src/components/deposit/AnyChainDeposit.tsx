@@ -22,13 +22,24 @@ import {
   type IntentToken,
 } from "@/lib/intents";
 import { useSession } from "@/lib/session";
-import { parseAmount } from "@/lib/tokens";
+import { parseAmount, type Token } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
 import { Button, ErrorBox, Row, Skeleton } from "@/components/ui";
-import { Chip, CopyField, Field, inputCls, IntentDialog, IntentIcon, More, Trail, useIntent } from "./parts";
+import { Chip, CopyField, fc, Field, inputCls, IntentDialog, IntentIcon, More, register, TestnetForm, TGAS, Trail, useIntent } from "./parts";
 
 type Pending = { q: IntentQuote; token: IntentToken; owner: string };
 const KIND = "deposit";
+
+// owner wallet -> sub-account ledger (ft_on_transfer); wNEAR wraps native NEAR first
+const depositTxs = (t: Token, raw: bigint, owner: string, sub: string) => [
+  {
+    receiverId: t.address,
+    actions: [
+      ...(t.key === "wnear" ? [register(owner), fc("near_deposit", {}, raw.toString(), `10${TGAS}`)] : []),
+      fc("ft_transfer_call", { receiver_id: sub, amount: raw.toString(), msg: "" }, "1", `100${TGAS}`),
+    ],
+  },
+];
 
 // "Deposit from any chain" trigger; need = USDC (display units) prefilled as the amount to receive
 export function AnyChainButton({ need, onArrived, className, children }: { need?: number; onArrived?: () => void; className?: string; children?: React.ReactNode }) {
@@ -51,8 +62,8 @@ export function AnyChainButton({ need, onArrived, className, children }: { need?
 
 export function AnyChainDeposit({ need, onClose, onArrived }: { need?: number; onClose: () => void; onArrived?: () => void }) {
   const { accountId, account, authenticated } = useSession();
-  const live = NETWORK === "mainnet" && authenticated && !!account;
-  const tokens = useAsync(live ? "intent-tokens" : null, getIntentTokens);
+  const live = authenticated && !!account && !!accountId;
+  const tokens = useAsync(live && NETWORK === "mainnet" ? "intent-tokens" : null, getIntentTokens);
   const [chain, setChain] = useState("base");
   const [assetId, setAssetId] = useState<string | null>(null);
   const [amount, setAmount] = useState(need ? String(Math.ceil(need * 100) / 100) : "");
@@ -93,11 +104,11 @@ export function AnyChainDeposit({ need, onClose, onArrived }: { need?: number; o
   }
 
   return (
-    <IntentDialog title="Deposit from any chain" subtitle="Arrives as USDC in your nearly account" onClose={onClose}>
-      {NETWORK !== "mainnet" ? (
-        <p className="text-sm text-muted-foreground">NEAR Intents runs on mainnet only.</p>
-      ) : !live ? (
+    <IntentDialog title="Deposit from any chain" subtitle={NETWORK === "mainnet" ? "Arrives as USDC in your nearly account" : "From your NEAR wallet into your nearly account"} onClose={onClose}>
+      {!live ? (
         <p className="text-sm text-muted-foreground">Connect your wallet first so funds have somewhere to land.</p>
+      ) : NETWORK !== "mainnet" ? (
+        <TestnetForm verb="Deposit" note="Your wallet signs one transaction. wNEAR is wrapped from your NEAR first." txs={(t, raw) => depositTxs(t, raw, accountId!, account!)} onDone={onArrived} />
       ) : tokens.error ? (
         <ErrorBox message={`NEAR Intents unavailable: ${tokens.error}`} />
       ) : !tokens.data ? (
