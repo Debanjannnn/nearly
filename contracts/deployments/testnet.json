@@ -1,7 +1,7 @@
 {
   "root": "nearly-dev-c7dc68.testnet",
-  "factory": "",
-  "treasury": "",
+  "factory": "factory.nearly-dev-c7dc68.testnet",
+  "treasury": "treasury.nearly-dev-c7dc68.testnet",
   "tokens": {
     "usdc": "usdcc.ft.ref-labs.testnet",
     "wnear": "wrap.testnet"

@@ -17,7 +17,8 @@ const EXECUTOR_ALLOWANCE: NearToken = NearToken::from_near(1);
 /// State, FT registrations and gas on top of the code storage.
 const ACCOUNT_BUFFER: NearToken = NearToken::from_near(1);
 const STATE_BYTES: u128 = 2_000;
-const GAS_INIT: Gas = Gas::from_tgas(50);
+/// init detaches one 10 TGas registration per token and venue.
+const GAS_INIT: Gas = Gas::from_tgas(100);
 const GAS_CB: Gas = Gas::from_tgas(10);
 
 #[near(serializers = [borsh, json])]

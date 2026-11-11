@@ -1,6 +1,7 @@
 //! Executor entrypoint: policy check, then dispatch one step to its venue.
 use near_sdk::json_types::U128;
-use near_sdk::{env, near, require, AccountId, NearToken, Promise};
+use near_sdk::serde_json;
+use near_sdk::{env, near, require, AccountId, Gas, NearToken, Promise, PromiseOrValue};
 
 use crate::events::Event;
 use crate::ledger::Slot;
@@ -10,6 +11,8 @@ use crate::{Contract, ContractExt};
 
 /// NEAR kept back for storage of new state + gas of later executor txs.
 const NEAR_RESERVE: NearToken = NearToken::from_millinear(500);
+/// Withdraw leg + settle + observe, issued from `on_lend_asset`.
+const GAS_LEND_CB: Gas = Gas::from_tgas(160);
 pub const STAKING_KEY: &str = "staking";
 
 pub fn lending_key(token: &AccountId) -> String {
@@ -33,20 +36,16 @@ impl Contract {
                     venues::supply(v.lending, token, amount.0),
                     Some(bal),
                     amount.0,
-                    Some((pos, None)),
+                    Some(pos),
                     true,
                 )
             }
             Step::WithdrawLend { token, amount } => {
-                let pos = Slot::Position(lending_key(&token));
-                self.debit(&pos, amount.0);
-                let bal = Slot::Balance(token.clone());
-                self.settle(
-                    venues::withdraw_lend(v.lending, token, amount.0),
-                    Some(pos),
-                    amount.0,
-                    Some((bal, None)),
-                    false,
+                self.debit(&Slot::Position(lending_key(&token)), amount.0);
+                venues::lend_asset(v.lending, token.clone()).then(
+                    Self::ext(env::current_account_id())
+                        .with_static_gas(GAS_LEND_CB)
+                        .on_lend_asset(token, amount),
                 )
             }
             Step::Swap {
@@ -58,10 +57,16 @@ impl Contract {
             } => {
                 let bal_in = Slot::Balance(token_in.clone());
                 self.debit(&bal_in, amount_in.0);
-                // shortcut: books min_out, not the real output; #4 reads the actual amount
-                let out = Some((Slot::Balance(token_out.clone()), Some(min_out)));
-                let p = venues::swap(v.dex, pool_id, token_in, token_out, amount_in.0, min_out.0);
-                self.settle(p, Some(bal_in), amount_in.0, out, true)
+                let p = venues::swap(
+                    v.dex,
+                    pool_id,
+                    token_in,
+                    token_out.clone(),
+                    amount_in.0,
+                    min_out.0,
+                );
+                let p = self.settle(p, Some(bal_in), amount_in.0, None, true);
+                Self::observe(p, token_out)
             }
             Step::Stake { amount } => {
                 require!(amount.0 <= free_near(), "insufficient NEAR");
@@ -70,7 +75,7 @@ impl Contract {
                     venues::stake(v.staking, amount.0),
                     None,
                     amount.0,
-                    Some((pos, None)),
+                    Some(pos),
                     false,
                 )
             }
@@ -97,6 +102,30 @@ impl Contract {
                 self.send(token, owner, amount.0)
             }
         }
+    }
+
+    /// Scales the withdraw to lending inner units; no asset config = position refunded.
+    #[private]
+    pub fn on_lend_asset(&mut self, token: AccountId, amount: U128) -> PromiseOrValue<U128> {
+        let pos = Slot::Position(lending_key(&token));
+        let scaled = env::promise_result_checked(0, 16_384)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+            .and_then(|a| a["config"]["extra_decimals"].as_u64())
+            .and_then(|d| 10u128.checked_pow(d as u32))
+            .and_then(|m| amount.0.checked_mul(m));
+        let Some(inner) = scaled else {
+            self.credit(&pos, amount.0);
+            return PromiseOrValue::Value(U128(0));
+        };
+        let p = venues::withdraw_lend(self.venues.lending.clone(), token.clone(), inner);
+        let p = self.settle(p, Some(pos), amount.0, None, false);
+        PromiseOrValue::Promise(Self::observe(p, token))
+    }
+
+    /// Pulls unstaked NEAR back once the staking delay passed. Funds only come here, so anyone may call.
+    pub fn claim_unstaked(&self) -> Promise {
+        venues::withdraw_unstaked(self.venues.staking.clone())
     }
 }
 
