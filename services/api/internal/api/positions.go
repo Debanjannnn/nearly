@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/big"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 )
 
 func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +179,10 @@ func (s *Server) run(execID, sub string, steps []planner.Step, after func(ctx co
 		if ok {
 			status, msg = "succeeded", ""
 		}
-		if err := s.Store.Finish(ctx, execID, results, done, status, msg); err != nil {
+		if err := s.Store.Finish(ctx, execID, results, done, status, msg); errors.Is(err, sweep.ErrSwept) {
+			slog.Warn("run outlived sweep, results dropped", "execution", execID)
+			return
+		} else if err != nil {
 			slog.Error("finish execution", "execution", execID, "err", err)
 		}
 		after(ctx, done, ok)

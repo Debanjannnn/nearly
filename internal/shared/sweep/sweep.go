@@ -3,6 +3,7 @@ package sweep
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -11,8 +12,11 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 )
 
-// Stale is older than any live run can be: executor budget plus time to record results.
-const Stale = executor.MaxRun + time.Minute
+// Stale is older than any live run can be: executor budget plus claim, finish and settle time.
+const Stale = executor.MaxRun + 5*time.Minute
+
+// ErrSwept means the sweep already failed the run; its late results must not settle anything.
+var ErrSwept = errors.New("execution already swept")
 
 // Once fails runs in flight past Stale: a dead withdraw stays resumable, a dead deploy's position goes withdrawing for the owner to unwind.
 // shortcut: a dead deploy's paid fee is not booked in fee_ledger; book it from chain if that matters.

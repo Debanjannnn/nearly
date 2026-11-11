@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -385,6 +386,9 @@ func TestSweptDeployRecovers(t *testing.T) {
 	}
 	if n, err := sweep.Once(ctx, e.db); err != nil || n != 1 {
 		t.Fatal(n, err)
+	}
+	if err := e.srv.Store.Finish(ctx, xid, nil, 0, "succeeded", ""); !errors.Is(err, sweep.ErrSwept) {
+		t.Fatal("late finish must not overwrite a swept run", err)
 	}
 	if pos := e.position(tok, pid); pos["state"] != "withdrawing" {
 		t.Fatal(pos)

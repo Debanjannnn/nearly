@@ -12,6 +12,7 @@ import (
 
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 )
 
 type Store struct{ DB *pgxpool.Pool }
@@ -317,18 +318,24 @@ where id=$1`, posID, held)
 	return err
 }
 
-// Finish records executor results; done is how many leading steps succeeded.
+// Finish records executor results; done is how many leading steps succeeded. sweep.ErrSwept = sweep got there first.
 func (p Store) Finish(ctx context.Context, execID string, results []executor.Result, done int, status, errMsg string) error {
 	return pgx.BeginFunc(ctx, p.DB, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `update executions set status=$2, steps_done=$3, error=nullif($4,''), updated_at=now() where id=$1 and status='running'`,
+			execID, status, done, errMsg)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return sweep.ErrSwept
+		}
 		for _, r := range results {
 			if _, err := tx.Exec(ctx, `update execution_steps set status=$3, tx_hash=nullif($4,''), error=nullif($5,''), updated_at=now()
 where execution_id=$1 and idx=$2`, execID, r.Index, r.Status, r.TxHash, r.Error); err != nil {
 				return err
 			}
 		}
-		_, err := tx.Exec(ctx, `update executions set status=$2, steps_done=$3, error=nullif($4,''), updated_at=now() where id=$1`,
-			execID, status, done, errMsg)
-		return err
+		return nil
 	})
 }
 
