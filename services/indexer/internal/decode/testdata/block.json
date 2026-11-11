@@ -1,0 +1,87 @@
+{
+  "block": {"header": {"height": 277250759, "hash": "D2mD47DPairNyCYVoxCQonDNnGD7N2Lwo9ta7REGpTsv", "timestamp": 1794420870230096120}},
+  "shards": [
+    {
+      "shard_id": 0,
+      "chunk": null,
+      "state_changes": [],
+      "receipt_execution_outcomes": [
+        {
+          "tx_hash": "6xdepTx",
+          "receipt": {"predecessor_id": "usdcc.ft.ref-labs.testnet", "receiver_id": "alice-testnet.factory.testnet"},
+          "execution_outcome": {
+            "block_hash": "D2mD47DPairNyCYVoxCQonDNnGD7N2Lwo9ta7REGpTsv",
+            "id": "RcptDeposit",
+            "outcome": {
+              "executor_id": "alice-testnet.factory.testnet",
+              "logs": ["EVENT_JSON:{\"standard\":\"nearly\",\"version\":\"1.0.0\",\"event\":\"deposit\",\"data\":{\"token\":\"usdcc.ft.ref-labs.testnet\",\"sender\":\"alice.testnet\",\"amount\":\"1000000000\"}}"],
+              "receipt_ids": [],
+              "status": {"SuccessValue": "IjAi"}
+            }
+          }
+        },
+        {
+          "tx_hash": "6xexecTx",
+          "receipt": {"predecessor_id": "alice-testnet.factory.testnet", "receiver_id": "alice-testnet.factory.testnet"},
+          "execution_outcome": {
+            "id": "RcptStep",
+            "outcome": {
+              "executor_id": "alice-testnet.factory.testnet",
+              "logs": [
+                "not json",
+                "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[]}",
+                "EVENT_JSON:{\"standard\":\"nearly\",\"version\":\"1.0.0\",\"event\":\"step\",\"data\":{\"step\":{\"kind\":\"supply\",\"token\":\"usdcc.ft.ref-labs.testnet\",\"amount\":\"500000000\"}}}",
+                "EVENT_JSON:{\"standard\":\"nearly\",\"version\":\"2.0.0\",\"event\":\"step\",\"data\":{}}"
+              ],
+              "receipt_ids": ["Next"],
+              "status": {"SuccessReceiptId": "Next"}
+            }
+          }
+        },
+        {
+          "tx_hash": "6xfailTx",
+          "execution_outcome": {
+            "id": "RcptFailed",
+            "outcome": {
+              "executor_id": "bob-testnet.factory.testnet",
+              "logs": ["EVENT_JSON:{\"standard\":\"nearly\",\"version\":\"1.0.0\",\"event\":\"step\",\"data\":{\"step\":{\"kind\":\"stake\",\"amount\":\"1\"}}}"],
+              "receipt_ids": [],
+              "status": {"Failure": {"ActionError": {"index": 0, "kind": {"FunctionCallError": {"ExecutionError": "Smart contract panicked: insufficient balance"}}}}}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "shard_id": 1,
+      "chunk": null,
+      "state_changes": [],
+      "receipt_execution_outcomes": [
+        {
+          "tx_hash": "6xotherTx",
+          "execution_outcome": {
+            "id": "RcptOther",
+            "outcome": {
+              "executor_id": "imposter.testnet",
+              "logs": ["EVENT_JSON:{\"standard\":\"nearly\",\"version\":\"1.0.0\",\"event\":\"deposit\",\"data\":{}}"],
+              "receipt_ids": [],
+              "status": {"SuccessValue": ""}
+            }
+          }
+        },
+        {
+          "tx_hash": "6xrevokeTx",
+          "execution_outcome": {
+            "id": "RcptRevoke",
+            "outcome": {
+              "executor_id": "alice-testnet.factory.testnet",
+              "logs": ["EVENT_JSON:{\"standard\":\"nearly\",\"version\":\"1.0.0\",\"event\":\"revoke\",\"data\":{\"public_key\":\"ed25519:11111111111111111111111111111111\"}}"],
+              "receipt_ids": [],
+              "status": {"SuccessReceiptId": "X"}
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

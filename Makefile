@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
-.PHONY: help infra contracts contracts-test test-contracts executor api scheduler market-data history client
+.PHONY: help infra contracts contracts-test test-contracts executor api scheduler market-data history indexer client
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  \033[36m%-14s\033[0m %s\n",$$1,$$2}'
@@ -41,6 +41,9 @@ market-data: ## run market-data
 
 history: ## run history
 	go run ./services/history/cmd/history
+
+indexer: ## run indexer
+	go run ./services/indexer/cmd/indexer
 
 client: ## run client
 	cd client && bun install && bun dev
