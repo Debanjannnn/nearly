@@ -2,7 +2,7 @@
 
 import type { NearConnector, SignAndSendTransactionsParams } from "@hot-labs/near-connect";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { ApiError, createAccount, errMsg, errText, getMe, postAuth, postRevoke, setToken } from "./api";
+import { ApiError, createAccount, errMsg, errText, getAuthNonce, getMe, postAuth, postRevoke, setToken } from "./api";
 import { NETWORK, RPC_URL } from "./config";
 import type { KeyStatus } from "./types";
 
@@ -59,7 +59,7 @@ const persist = (s: Saved | null) => {
   } catch {}
 };
 
-const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const connector = useRef<NearConnector | null>(null);
@@ -135,13 +135,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     try {
       const wallet = await c.wallet().catch(() => c.connect());
       if (!cur?.token) {
-        const nonce = crypto.getRandomValues(new Uint8Array(32));
-        const signed = await wallet.signMessage({ ...LOGIN, nonce });
+        // server-issued, single-use, short ttl: an old signed login cannot be replayed
+        const { nonce } = await getAuthNonce();
+        const signed = await wallet.signMessage({ ...LOGIN, nonce: unb64(nonce) });
         const { token } = await postAuth({
           account_id: signed.accountId,
           public_key: signed.publicKey,
           signature: signed.signature,
-          nonce: b64(nonce),
+          nonce,
         });
         cur = { accountId: signed.accountId, token, account: null };
         save(cur);

@@ -3,6 +3,7 @@ package auth
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -32,6 +33,9 @@ func Verify(publicKey, signature string, nonce []byte) error {
 	}
 	return nil
 }
+
+// NewNonce is a random 32-byte login challenge.
+func NewNonce() []byte { b := make([]byte, 32); rand.Read(b); return b }
 
 // Hash is sha256(borsh(u32 tag) || borsh(payload)).
 func Hash(message, recipient string, nonce []byte) []byte {

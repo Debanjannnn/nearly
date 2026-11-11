@@ -128,6 +128,7 @@ export function toDef(sleeves: Sleeve[], rules: Rules): BasketDef {
 
 // api — auth (NEP-413 signed message → bearer)
 export type AuthInput = { account_id: string; public_key: string; signature: string; nonce: string };
+export const getAuthNonce = () => request<{ nonce: string }>(`${API_URL}/auth/nonce`);
 export const postAuth = (b: AuthInput) => request<{ token: string }>(`${API_URL}/auth`, json(b));
 
 // api — public; the bearer lets a creator read their private basket

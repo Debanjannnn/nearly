@@ -8,13 +8,20 @@ import (
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 )
 
+// nonce issues a single-use login challenge the client must sign within the ttl.
+func (s *Server) nonce(w http.ResponseWriter, r *http.Request) {
+	n := auth.NewNonce()
+	err := s.Store.IssueNonce(r.Context(), n)
+	reply(w, "issue nonce", map[string]string{"nonce": base64.StdEncoding.EncodeToString(n)}, err)
+}
+
 // login checks a NEP-413 signed "nearly login" from a full-access key of account_id, then issues a session.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		AccountID string `json:"account_id"`
 		PublicKey string `json:"public_key"`
 		Signature string `json:"signature"`
-		Nonce     string `json:"nonce"` // base64, 32 bytes
+		Nonce     string `json:"nonce"` // base64, from GET /auth/nonce
 	}
 	if !decode(w, r, &in) {
 		return
