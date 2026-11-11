@@ -5,7 +5,7 @@ pub const MAX_STEPS: usize = 32;
 const USDC_ONE: u128 = 1_000_000;
 const NEAR_ONE: u128 = 1_000_000_000_000_000_000_000_000;
 
-/// Only `<owner>.<factory>` accounts carry the executor key.
+/// Only `<owner>.<factory>` accounts carry the executor key; the factory makes one label.
 pub fn check_account(dep: &Deployments, account: &str) -> Result<(), String> {
     if dep.factory.is_empty() {
         return Err("factory unset in deployments".into());
@@ -15,11 +15,9 @@ pub fn check_account(dep: &Deployments, account: &str) -> Result<(), String> {
         .unwrap_or_default();
     let valid = account.len() <= 64
         && !owner.is_empty()
-        && owner.split('.').all(|p| {
-            !p.is_empty()
-                && p.bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
-        });
+        && owner
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_');
     if !valid {
         return Err(format!(
             "account {account} is not a {} sub-account",
@@ -109,12 +107,13 @@ mod tests {
     #[test]
     fn account_must_be_factory_child() {
         let d = dep();
-        assert!(check_account(&d, "alice.testnet.factory.nearly.testnet").is_ok());
+        assert!(check_account(&d, "alice-testnet.factory.nearly.testnet").is_ok());
         for bad in [
             "factory.nearly.testnet",
             ".factory.nearly.testnet",
             "evil.testnet",
             "a..factory.nearly.testnet",
+            "x.alice-testnet.factory.nearly.testnet",
             "Bob.factory.nearly.testnet",
             "xfactory.nearly.testnet",
         ] {

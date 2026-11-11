@@ -9,7 +9,7 @@ use std::{
 };
 use tower::ServiceExt;
 
-const ACCOUNT: &str = "alice.testnet.factory.nearly.testnet";
+const ACCOUNT: &str = "alice-testnet.factory.nearly.testnet";
 const USDC: &str = "usdcc.ft.ref-labs.testnet";
 
 /// Fake RPC: logs calls; the first send_tx is refused with InvalidNonce, the rest succeed.
