@@ -1,8 +1,8 @@
-// Wire shapes of api, market-data and history. Token amounts are u128 decimal strings (atoms).
+// Wire shapes of api, market-data and history (token amounts = u128 atoms), plus the view shapes lib/api maps them into.
 
-export type Source = "lending" | "staking" | "hold";
+export type LegSource = "lending" | "staking" | "hold";
 // token = deployments token key ("usdc" | "wnear"); a non-usdc leg is bought on pool_id
-export type Leg = { token: string; source: Source; weight_bps: number; pool_id?: number };
+export type Leg = { token: string; source: LegSource; weight_bps: number; pool_id?: number };
 export type BasketDef = { legs: Leg[]; drift_bps?: number };
 
 export type Basket = { id: string; creator: string; name: string; definition: BasketDef; public: boolean; created_at: string };
@@ -14,7 +14,9 @@ export type Me = { account_id: string; sub_account: string | null; key_status: K
 export type TxBody = { receiverId: string; actions: { type: "FunctionCall"; params: { methodName: string; args: object; gas: string; deposit: string } }[] };
 export type AccountReply = { account_id: string | null; key_status: KeyStatus; tx?: TxBody };
 
-export type Holdings = { account_id: string; tokens: Record<string, { token: string; balance: string }> };
+export type HoldingsWire = { account_id: string; tokens: Record<string, { token: string; balance: string }> };
+// view: one row per token, amount in display units
+export type Holdings = { wallet: string; tokens: { symbol: string; address: string; raw: string; amount: string }[] };
 
 export type Step = {
   kind: "supply" | "withdraw_lend" | "swap" | "stake" | "unstake" | "fee" | "to_owner";
@@ -78,6 +80,8 @@ export type Schedule = {
   active: boolean;
   created_at: string;
 };
+// basket = recurring buy / DCA, position = rebalance, market = token page (no backend schedule yet)
+export type Target = { type: "market" | "position" | "strategy"; id: string };
 
 // market-data; token = contract id, apy fraction (0.05 = 5%)
 export type Rate = { venue: "lending" | "staking"; contract: string; token: string; apy: number; ts: number };
@@ -97,7 +101,7 @@ export type Quote = {
 };
 
 // history POST /backtest; contributions keyed "<source>:<token>", "price", "costs"
-export type Backtest = {
+export type BacktestWire = {
   from: string;
   to: string;
   days: number;
@@ -111,4 +115,36 @@ export type Backtest = {
   contributions: Record<string, number>;
   curve: { day: string; usd: number }[];
 };
+export type Backtest = {
+  from: string;
+  to: string;
+  days: number;
+  coverage: { series: string; first: string; last: string; days: number; note?: string }[];
+  initialUsd: number;
+  finalUsd: number;
+  apyUsd: number;
+  maxDrawdownUsd: number;
+  rebalances: number;
+  costsUsd: number;
+  curve: { day: string; usd: number }[];
+};
 export type PricePoint = { day: string; usd: string };
+
+// view of a basket: one sleeve per token, sources split that sleeve (weights in bps of the sleeve)
+export type SourceKind = "hold" | "lending" | "staking" | "lp";
+export type Source = { kind: SourceKind; venue: string; weightBps: number };
+export type Sleeve = { asset: string; weightBps: number; sources: Source[] };
+export type Rules = { driftBps?: number };
+
+export type Strategy = {
+  id: string;
+  creator: string;
+  name: string;
+  sleeves: Sleeve[];
+  rules: Rules;
+  public: boolean;
+  createdAt: string;
+  definition: BasketDef;
+};
+
+export type StrategyInput = { name: string; sleeves: Sleeve[]; rules: Rules; public: boolean };

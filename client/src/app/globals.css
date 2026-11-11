@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -6,6 +8,14 @@
   --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-inter);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -78,20 +88,6 @@ body {
   background-clip: content-box;
 }
 
-.no-scrollbar {
-  scrollbar-width: none;
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.tnum,
-.font-mono {
-  font-variant-numeric: tabular-nums;
-}
-
-/* weight sliders: --pct = filled share of the track */
 .range {
   -webkit-appearance: none;
   appearance: none;
@@ -103,13 +99,21 @@ body {
 .range::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--primary) var(--pct), var(--secondary) var(--pct));
+  background: linear-gradient(
+    to right,
+    var(--primary) var(--pct),
+    var(--secondary) var(--pct)
+  );
 }
 
 .range::-moz-range-track {
   height: 4px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--primary) var(--pct), var(--secondary) var(--pct));
+  background: linear-gradient(
+    to right,
+    var(--primary) var(--pct),
+    var(--secondary) var(--pct)
+  );
 }
 
 .range::-webkit-slider-thumb {
@@ -131,14 +135,17 @@ body {
   background: var(--primary);
 }
 
-/* variables, not overrides: the React Flow stylesheet loads after this file */
-.react-flow {
-  --xy-edge-stroke-default: var(--muted-foreground);
-  --xy-edge-stroke-width-default: 1.5;
-  --xy-background-pattern-dots-color-default: var(--border);
-  --xy-node-boxshadow-default: none;
-  --xy-node-border-default: none;
-  --xy-node-background-color-default: transparent;
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.tnum,
+.font-mono {
+  font-variant-numeric: tabular-nums;
 }
 
 :root {
@@ -171,6 +178,14 @@ body {
   --chart-4: oklch(0.38 0 0);
   --chart-5: oklch(0.28 0 0);
   --radius: 0.75rem;
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: #c4f56a;
+  --sidebar-primary-foreground: #101010;
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: #c4f56a;
 }
 
 @layer base {
@@ -183,4 +198,15 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* Variables, not rule overrides: the React Flow stylesheet is imported by the
+   component and so loads after this file. */
+.react-flow {
+  --xy-edge-stroke-default: var(--muted-foreground);
+  --xy-edge-stroke-width-default: 1.5;
+  --xy-background-pattern-dots-color-default: var(--border);
+  --xy-node-boxshadow-default: none;
+  --xy-node-border-default: none;
+  --xy-node-background-color-default: transparent;
 }

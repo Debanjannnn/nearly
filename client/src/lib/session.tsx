@@ -2,7 +2,7 @@
 
 import type { NearConnector, SignAndSendTransactionsParams } from "@hot-labs/near-connect";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { ApiError, createAccount, errText, getMe, postAuth, postRevoke, setToken } from "./api";
+import { ApiError, createAccount, errMsg, errText, getMe, postAuth, postRevoke, setToken } from "./api";
 import { NETWORK, RPC_URL } from "./config";
 import type { KeyStatus } from "./types";
 
@@ -20,9 +20,18 @@ export type Session = {
   keyStatus: KeyStatus | null; // executor function-call key on the sub-account
   pending: boolean;
   error: string | null;
-  login: () => Promise<void>;
+  login: () => Promise<boolean>;
+  // runs login when the account isn't ready yet; actions await it, then continue
+  ensureReady: () => Promise<boolean>;
   logout: () => Promise<void>;
   revoke: () => Promise<void>;
+  // shared shape with the page components: address = sub-account, mainAddress = wallet, delegated = executor key on
+  address: string | undefined;
+  mainAddress: string | undefined;
+  delegated: boolean;
+  delegate: () => Promise<boolean>;
+  delegating: boolean;
+  delegationError: string | null;
   // signs with the connected wallet; resolves tx hashes, throws if any tx failed
   send: (txs: SignAndSendTransactionsParams["transactions"]) => Promise<string[]>;
 };
@@ -116,10 +125,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return out.map((o) => o.transaction_outcome.id);
   }, []);
 
-  // idempotent: connects, signs in, creates the sub-account; skips steps already done
-  const login = useCallback(async () => {
+  // the one connect chain: wallet → NEP-413 sign-in → sub-account; skips steps already done, true once ready
+  const login = useCallback(async (): Promise<boolean> => {
     const c = connector.current;
-    if (!c) return;
+    if (!c) return false;
     setPending(true);
     setError(null);
     let cur = s;
@@ -149,9 +158,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         save({ ...cur, account: r.account_id });
         setKeyStatus(r.key_status);
       }
+      return true;
     } catch (e) {
       if (e instanceof ApiError && e.status === 401 && cur) save({ ...cur, token: null });
       setError(errText(e));
+      return false;
     } finally {
       setPending(false);
     }
@@ -207,12 +218,56 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         pending,
         error,
         login,
+        ensureReady: () => (s?.token && s.account ? Promise.resolve(true) : login()),
         logout,
         revoke,
         send,
+        address: s?.account ?? undefined,
+        mainAddress: s?.accountId ?? undefined,
+        delegated: keyStatus === "active",
+        delegate: login,
+        delegating: pending,
+        delegationError: error,
       }}
     >
       {children}
     </Ctx.Provider>
   );
+}
+
+// key null = idle; changing key refetches; reload() refetches keeping current data; pollMs = reload on an interval.
+export function useAsync<T>(key: string | null, fn: () => Promise<T>, pollMs?: number) {
+  const [nonce, setNonce] = useState(0);
+  const [st, setSt] = useState<{ key: string | null; nonce: number; data: T | null; error: string | null }>({
+    key: null,
+    nonce: -1,
+    data: null,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (key === null) return;
+    let live = true;
+    fn()
+      .then((data) => live && setSt({ key, nonce, data, error: null }))
+      .catch((e) => live && setSt((p) => ({ key, nonce, data: p.key === key ? p.data : null, error: errMsg(e) })));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, nonce]);
+
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  useEffect(() => {
+    if (key === null || !pollMs) return;
+    const t = setInterval(reload, pollMs);
+    return () => clearInterval(t);
+  }, [key, pollMs, reload]);
+  const same = key !== null && st.key === key;
+  return {
+    data: same ? st.data : null,
+    error: same ? st.error : null,
+    loading: key !== null && !(same && st.nonce === nonce),
+    reload,
+  };
 }

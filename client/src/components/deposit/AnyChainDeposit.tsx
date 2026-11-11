@@ -33,9 +33,10 @@ const KIND = "deposit";
 // "Deposit from any chain" trigger; need = USDC (display units) prefilled as the amount to receive
 export function AnyChainButton({ need, onArrived, className, children }: { need?: number; onArrived?: () => void; className?: string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const { ensureReady } = useSession();
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={cn("inline-flex items-center gap-1.5 text-xs text-primary hover:underline", className)}>
+      <button type="button" onClick={() => void ensureReady().then((ok) => ok && setOpen(true))} className={cn("inline-flex items-center gap-1.5 text-xs text-primary hover:underline", className)}>
         {children ?? (
           <>
             <Globe className="size-3.5" />
@@ -96,7 +97,7 @@ export function AnyChainDeposit({ need, onClose, onArrived }: { need?: number; o
       {NETWORK !== "mainnet" ? (
         <p className="text-sm text-muted-foreground">NEAR Intents runs on mainnet only.</p>
       ) : !live ? (
-        <p className="text-sm text-muted-foreground">Sign in and create your account first so funds have somewhere to land.</p>
+        <p className="text-sm text-muted-foreground">Connect your wallet first so funds have somewhere to land.</p>
       ) : tokens.error ? (
         <ErrorBox message={`NEAR Intents unavailable: ${tokens.error}`} />
       ) : !tokens.data ? (

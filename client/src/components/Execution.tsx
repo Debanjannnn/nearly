@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Check, ExternalLink } from "lucide-react";
-import { errText, shortId } from "@/lib/api";
+import { errText, shortHash } from "@/lib/api";
 import { txUrl } from "@/lib/config";
 import { settled, useExecution } from "@/lib/hooks";
 import { decimalsOf, fmtUnits, KEYS, symbolOf, tokenIdOf } from "@/lib/tokens";
@@ -66,7 +66,7 @@ export function ExecutionProgress({ id, onSettled }: { id: string; onSettled?: (
             {stepLabel(s.step)}
             {s.tx_hash && (
               <a href={txUrl(s.tx_hash)} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 hover:text-foreground">
-                {shortId(s.tx_hash)}
+                {shortHash(s.tx_hash)}
                 <ExternalLink className="size-3" />
               </a>
             )}

@@ -1,40 +1,43 @@
 "use client";
 
-import { CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { errText, fmtUsd, pct } from "@/lib/api";
+import { Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
+import { errText, fmtUsd } from "@/lib/api";
+import type { Backtest, Sleeve, SourceKind } from "@/lib/types";
 import { symbolOf } from "@/lib/tokens";
-import type { Backtest, BasketDef, Source } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { ErrorBox, Skeleton, Stat } from "@/components/ui";
-import { legLabel, SOURCE_LABEL } from "./legs";
+import { defaultVenue, KIND_LABEL, venueName } from "./sources";
+import { cn } from "@/lib/utils";
 
 const COLORS = ["var(--primary)", "var(--chart-1)", "var(--chart-2)", "var(--warning)", "var(--chart-3)", "var(--chart-4)"];
 
-// series "price:wnear" | "apy:lending:usdc", contribution keys "lending:usdc"
+export const pct = (s: string | number | null | undefined, d = 2) =>
+  s === null || s === undefined || s === "" ? "-" : `${(Number(s) * 100).toFixed(d)}%`;
+
+// "price:wnear" | "apy:lending:usdc" | "apy:staking:wnear"
 function seriesLabel(series: string) {
-  const parts = series.split(":");
-  const tok = parts.at(-1)!;
-  if (parts[0] === "price") return `${symbolOf(tok)} price`;
-  const src = parts.find((p): p is Source => p in SOURCE_LABEL);
-  return src ? `${symbolOf(tok)} ${SOURCE_LABEL[src].toLowerCase()}` : series;
+  const [t, a, b] = series.split(":");
+  if (t === "price") return `${symbolOf(a)} price`;
+  if (t === "apy") return `${venueName(defaultVenue(a as SourceKind))} ${symbolOf(b)}`;
+  return series;
 }
 
-// equity curve over the window + headline stats + coverage notes
+// equity over the backtest window + headline stats + coverage notes
 export function BacktestView({ bt, loading, error }: { bt: Backtest | null; loading: boolean; error: string | null }) {
   if (error) return <ErrorBox message={errText(new Error(error))} />;
   if (!bt) return loading ? <Skeleton className="h-80 w-full" /> : <p className="text-sm text-muted-foreground">Run a backtest to see history.</p>;
-  const clamped = bt.coverage.filter((c) => c.note);
-  const contrib = Object.entries(bt.contributions).filter(([, v]) => Math.abs(v) >= 0.005);
+  const data = bt.curve.map((p) => ({ day: p.day, usd: Number(p.usd) }));
+  // dedupe: multi-token runs repeat the same series per sleeve
+  const clamped = [...new Map(bt.coverage.filter((c) => c.note).map((c) => [seriesLabel(c.series), { ...c, label: seriesLabel(c.series) }])).values()];
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-6 md:grid-cols-3">
-        <Stat label="APY (USD)" value={<span className="text-positive">{pct(bt.apy)}</span>} note={`${bt.days}d window`} />
-        <Stat label="Max drawdown" value={pct(bt.max_drawdown)} />
-        <Stat label="Final" value={fmtUsd(bt.final_usd)} note={`from ${fmtUsd(bt.initial_usd)}`} />
+        <Stat label="APY (USD)" value={<span className="text-positive">{pct(bt.apyUsd)}</span>} />
+        <Stat label="Max drawdown" value={pct(bt.maxDrawdownUsd)} />
+        <Stat label="Final" value={fmtUsd(Number(bt.finalUsd))} note={`from ${fmtUsd(Number(bt.initialUsd))} · ${bt.days}d`} />
       </dl>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
-          <LineChart data={bt.curve} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+          <LineChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} strokeDasharray="3 4" stroke="var(--border)" />
             <XAxis dataKey="day" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={48} />
             <YAxis
@@ -55,43 +58,40 @@ export function BacktestView({ bt, loading, error }: { bt: Backtest | null; load
         </ResponsiveContainer>
       </div>
       <p className="text-xs text-muted-foreground">
-        {bt.from} → {bt.to} · {bt.rebalances} rebalances · costs {fmtUsd(bt.costs_usd)}
+        {bt.from} → {bt.to} · {bt.rebalances} rebalances · costs {fmtUsd(Number(bt.costsUsd))}
       </p>
-      {contrib.length > 0 && (
-        <div className="flex flex-wrap gap-2 text-xs">
-          {contrib.map(([k, v]) => (
-            <span key={k} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1">
-              {k === "price" ? "Price move" : k === "costs" ? "Costs" : seriesLabel(k)}
-              <span className={v >= 0 ? "text-positive" : "text-destructive"}>
-                {v >= 0 ? "+" : ""}
-                {fmtUsd(v)}
-              </span>
-            </span>
-          ))}
-        </div>
-      )}
       {clamped.length > 0 && (
-        <div className="space-y-2 rounded-xl border border-border bg-secondary/30 p-4 text-xs">
-          <p className="text-muted-foreground">Window shortened to the data every source has</p>
-          <div className="flex flex-wrap gap-2">
-            {clamped.map((c) => (
-              <span key={c.series} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1">
-                {seriesLabel(c.series)}
-                <span className="text-muted-foreground">
-                  {c.first} → {c.last}
-                </span>
-              </span>
-            ))}
-          </div>
+        <div className="space-y-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs">
+          {clamped.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-muted-foreground">Window shortened to the data every source has</p>
+              <div className="flex flex-wrap gap-2">
+                {clamped.map((c) => (
+                  <span key={c.label} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1">
+                    {c.label}
+                    <span className="text-muted-foreground">
+                      {c.first} → {c.last}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// one slice per leg; stacked = donut above a full-width legend (narrow cards)
-export function AllocationDonut({ def, stacked = false }: { def: BasketDef; stacked?: boolean }) {
-  const data = def.legs.map((l) => ({ name: legLabel(l), value: l.weight_bps }));
+// token → source slices; token prefix only when there are several
+// stacked: donut above a full-width legend (narrow cards)
+export function AllocationDonut({ sleeves, stacked = false }: { sleeves: Sleeve[]; stacked?: boolean }) {
+  const data = sleeves.flatMap((sl) =>
+    sl.sources.map((s) => ({
+      name: `${sleeves.length > 1 ? `${sl.asset} · ` : ""}${KIND_LABEL[s.kind]} · ${venueName(s.venue)}`,
+      value: (sl.weightBps * s.weightBps) / 10000,
+    })),
+  );
   return (
     <div className={cn("flex items-center gap-6", stacked ? "flex-col" : "flex-wrap")}>
       <div className={stacked ? "size-44" : "size-40"}>
