@@ -1860,6 +1860,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "near-contract-standards"
+version = "5.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5172408539a27bda9a5bb611e1dcdb0825ee26296bf37ccec9299c7f90357834"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
 name = "near-crypto"
 version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2354,6 +2363,35 @@ dependencies = [
  "near-workspaces",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "nearly-mocks-dex"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
+name = "nearly-mocks-ft"
+version = "0.1.0"
+dependencies = [
+ "near-contract-standards",
+ "near-sdk",
+]
+
+[[package]]
+name = "nearly-mocks-lending"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
+name = "nearly-mocks-staking"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
 ]
 
 [[package]]
