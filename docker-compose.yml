@@ -153,6 +153,8 @@ services:
       PORT: "8088"
       DATABASE_URL: *db
       START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
+      POLL_EVERY: ${INDEXER_POLL_EVERY:-5s}
+      MAX_LAG: ${INDEXER_MAX_LAG:-600}
     ports: ["127.0.0.1:8088:8088"]
     healthcheck:
       <<: *health

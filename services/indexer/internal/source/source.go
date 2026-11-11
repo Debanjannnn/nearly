@@ -49,12 +49,35 @@ type Outcome struct {
 	} `json:"execution_outcome"`
 }
 
+// RateLimited is a 429; Wait is Retry-After, 0 when absent or unparsable.
+type RateLimited struct{ Wait time.Duration }
+
+func (e *RateLimited) Error() string {
+	return fmt.Sprintf("neardata rate limited, retry after %s", e.Wait)
+}
+
 func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.URL+path, nil)
 	if err != nil {
 		return nil, err
 	}
-	return c.HTTP.Do(req)
+	res, err := c.HTTP.Do(req)
+	if err != nil || res.StatusCode != http.StatusTooManyRequests {
+		return res, err
+	}
+	res.Body.Close()
+	return nil, &RateLimited{Wait: retryAfter(res.Header.Get("Retry-After"), time.Now())}
+}
+
+// retryAfter reads delay-seconds or an HTTP date.
+func retryAfter(v string, now time.Time) time.Duration {
+	if s, err := strconv.Atoi(v); err == nil && s > 0 {
+		return time.Duration(s) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil && t.After(now) {
+		return t.Sub(now)
+	}
+	return 0
 }
 
 // Final is the height of the latest final block.
