@@ -220,6 +220,8 @@ func TestRebalanceMinInterval(t *testing.T) {
 	e := newEnv(t)
 	_, pos := e.seed()
 	e.exec(`update schedules set active = kind = 'rebalance'`)
+	// slot missed by 59m: the fire still waits a full hour, not the 1m left in the grid
+	e.exec(`update schedules set next_run_at=$1`, e.now.Add(-59*time.Minute))
 	s := e.sched()
 	s.Once(context.Background(), e.now)
 	s.Wait()

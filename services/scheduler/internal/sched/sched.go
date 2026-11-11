@@ -189,8 +189,11 @@ func (s *Scheduler) fire(ctx context.Context, d Due, now time.Time) error {
 	default:
 		return fmt.Errorf("unknown kind %q", d.Kind)
 	}
-	// the slot advances only when something fires, so a rebalance waits a full interval after acting
-	execID, err := s.Store.Claim(ctx, d, NextRun(d.Next, d.Every, now), &j)
+	next := NextRun(d.Next, d.Every, now)
+	if d.Kind == "rebalance" { // slot moves only on fire, so a late fire still waits a full interval
+		next = now.Add(time.Duration(d.Every) * time.Second)
+	}
+	execID, err := s.Store.Claim(ctx, d, next, &j)
 	if err != nil || execID == "" {
 		return err
 	}
