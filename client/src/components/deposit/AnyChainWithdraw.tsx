@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { Button, ErrorBox, Row, Skeleton } from "@/components/ui";
 import { Chip, Field, inputCls, IntentDialog, IntentIcon, More, Trail, useIntent } from "./parts";
 
-type Pending = { q: IntentQuote; from: Token; amount: string; dest: IntentToken; recipient: string; owner: string; sub: string; sent?: boolean };
+type Pending = { q: IntentQuote; from: Token; amount: string; dest: IntentToken; recipient: string; owner: string; sub: string; withdrawn?: boolean; sent?: boolean };
 const KIND = "withdraw";
 const FTS = TOKENS.filter((t) => t.id !== "near");
 const TGAS = "000000000000";
@@ -38,15 +38,14 @@ const fc = (methodName: string, args: object, deposit: string, gas = `30${TGAS}`
 const register = (account_id: string) => fc("storage_deposit", { account_id, registration_only: true }, STORAGE);
 
 // account.withdraw pays the owner, then the owner sends it to the 1Click deposit address
-const withdrawTxs = (p: Pending) => {
-  const addr = p.q.quote.depositAddress!;
-  const memo = p.q.quote.depositMemo ?? null;
-  return [
-    { receiverId: p.from.id, actions: [register(p.owner), register(addr)] },
-    { receiverId: p.sub, actions: [fc("withdraw", { token: p.from.id, amount: p.amount }, "1", `100${TGAS}`)] },
-    { receiverId: p.from.id, actions: [fc("ft_transfer", { receiver_id: addr, amount: p.amount, memo }, "1")] },
-  ];
-};
+const withdrawTxs = (p: Pending) => [
+  { receiverId: p.from.id, actions: [register(p.owner), register(p.q.quote.depositAddress!)] },
+  { receiverId: p.sub, actions: [fc("withdraw", { token: p.from.id, amount: p.amount }, "1", `100${TGAS}`)] },
+];
+const transferTx = (p: Pending) => ({
+  receiverId: p.from.id,
+  actions: [fc("ft_transfer", { receiver_id: p.q.quote.depositAddress!, amount: p.amount, memo: p.q.quote.depositMemo ?? null }, "1")],
+});
 
 export function AnyChainWithdrawButton({ className, children }: { className?: string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -105,11 +104,14 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setErr(null);
     try {
-      const hashes = await send(withdrawTxs(p));
-      // mark sent before submit: a failed submit must not re-run the withdraw
-      const done = { ...p, sent: true };
-      save(done);
-      await submitIntent(p.q.quote.depositAddress!, p.q.quote.depositMemo, hashes[hashes.length - 1]).catch(() => {});
+      // two signs, each step saved, so a retry never re-runs a withdraw that landed
+      if (!p.withdrawn) {
+        await send(withdrawTxs(p));
+        save((p = { ...p, withdrawn: true }));
+      }
+      const [hash] = await send([transferTx(p)]);
+      save({ ...p, sent: true });
+      await submitIntent(p.q.quote.depositAddress!, p.q.quote.depositMemo, hash).catch(() => {});
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -208,7 +210,7 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
           <Button className="w-full py-3" pending={busy} disabled={!pq.data || busy} onClick={() => void start()}>
             Withdraw to {chainName(chain)}
           </Button>
-          <p className="text-[11px] text-muted-foreground">Your wallet signs the withdraw to itself, then the transfer into NEAR Intents. Refunds return to your wallet.</p>
+          <p className="text-[11px] text-muted-foreground">Your wallet signs twice: the withdraw to itself, then the transfer into NEAR Intents. Refunds return to your wallet.</p>
         </>
       )}
     </IntentDialog>
@@ -237,7 +239,7 @@ function Progress({ pending: p, busy, err, onSign, onReset }: { pending: Pending
         <>
           {err && <ErrorBox message={err} />}
           <Button className="w-full py-3" pending={busy} onClick={onSign}>
-            Sign and send
+            {p.withdrawn ? "Send to NEAR Intents" : "Sign and send"}
           </Button>
         </>
       ) : (
