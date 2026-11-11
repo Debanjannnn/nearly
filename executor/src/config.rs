@@ -72,7 +72,7 @@ impl Config {
         let dir = opt("DEPLOYMENTS_DIR").unwrap_or_else(|| "../contracts/deployments".into());
         Ok(Self {
             addr: opt("EXECUTOR_ADDR").unwrap_or_else(|| "0.0.0.0:8083".into()),
-            rpc_url: opt("NEAR_RPC_URL")
+            rpc_url: opt("RPC_URL")
                 .unwrap_or_else(|| format!("https://rpc.{network}.near.org")),
             executor_account_id: require("EXECUTOR_ACCOUNT_ID")?,
             executor_private_key: require("EXECUTOR_PRIVATE_KEY")?,

@@ -56,7 +56,7 @@ services:
     restart: unless-stopped
     environment:
       NEAR_NETWORK: ${NEAR_NETWORK:-testnet}
-      NEAR_RPC_URL: ${RPC_URL:-https://test.rpc.fastnear.com}
+      RPC_URL: ${RPC_URL:-https://test.rpc.fastnear.com}
       EXECUTOR_ACCOUNT_ID: ${EXECUTOR_ACCOUNT_ID:-}
       EXECUTOR_PRIVATE_KEY: ${EXECUTOR_PRIVATE_KEY:-}
       INTERNAL_SECRET: ${INTERNAL_SECRET:-}
