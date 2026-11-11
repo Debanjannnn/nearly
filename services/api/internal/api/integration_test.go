@@ -22,10 +22,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Debanjannnn/nearly/internal/shared/config"
+	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
-	"github.com/Debanjannnn/nearly/services/api/internal/executor"
 )
 
 // testDB applies every migration into a throwaway schema and returns a pool pinned to it.
@@ -149,7 +149,7 @@ func setup(t *testing.T) *env {
 	dep := &config.Deployments{Factory: "factory.t", Tokens: map[string]string{"usdc": "usdc.t", "wnear": "wrap.t"}}
 	s := &Server{
 		Store: Store{DB: db}, Chain: fc,
-		Exec:     &executor.Client{URL: exSrv.URL, Secret: "sec", HTTP: http.DefaultClient},
+		Exec:     &executor.Client{URL: exSrv.URL, Secret: "sec", Caller: "api", HTTP: http.DefaultClient},
 		Sessions: &auth.Sessions{Secret: []byte("test-secret"), TTL: time.Hour},
 		Plan:     &planner.Planner{Tokens: dep.Tokens, Q: fc, SlippageBps: 100},
 		Dep:      dep, ExecutorKey: "ed25519:exec",

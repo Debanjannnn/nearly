@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Debanjannnn/nearly/internal/shared/config"
+	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/intents"
 	"github.com/Debanjannnn/nearly/internal/shared/near"
@@ -20,7 +21,6 @@ import (
 	"github.com/Debanjannnn/nearly/services/api/internal/api"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 	"github.com/Debanjannnn/nearly/services/api/internal/chain"
-	"github.com/Debanjannnn/nearly/services/api/internal/executor"
 )
 
 func main() {
@@ -63,7 +63,7 @@ func run() error {
 	srv := &api.Server{
 		Store:       api.Store{DB: db},
 		Chain:       ch,
-		Exec:        &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, HTTP: &http.Client{Timeout: 15 * time.Minute}},
+		Exec:        &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "api", HTTP: &http.Client{Timeout: 15 * time.Minute}},
 		Sessions:    &auth.Sessions{Secret: []byte(secret), TTL: ttl},
 		Plan:        &planner.Planner{Tokens: dep.Tokens, Q: ch, SlippageBps: slip},
 		Dep:         dep,

@@ -12,11 +12,11 @@ import (
 	"sync"
 
 	"github.com/Debanjannnn/nearly/internal/shared/config"
+	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/intents"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
-	"github.com/Debanjannnn/nearly/services/api/internal/executor"
 )
 
 // Chain is the RPC surface the api reads (chain.Chain).

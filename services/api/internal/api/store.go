@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
-	"github.com/Debanjannnn/nearly/services/api/internal/executor"
 )
 
 type Store struct{ DB *pgxpool.Pool }
