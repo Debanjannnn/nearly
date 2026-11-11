@@ -1,5 +1,5 @@
-import { BasketBuilder } from "@/components/basket/Builder";
+import { StrategyBuilder } from "@/components/earn/Builder";
 
-export default function NewBasket() {
-  return <BasketBuilder />;
+export default function NewBasketPage() {
+  return <StrategyBuilder />;
 }

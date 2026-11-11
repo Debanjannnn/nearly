@@ -8,10 +8,11 @@ import { decimalsOf, fmtUnits, symbolOf, tokenIdOf } from "@/lib/tokens";
 import type { BasketDef } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Panel, Row } from "@/components/ui";
+import { STAKING_EXIT } from "./sources";
 
 const NOTES = {
-  lending: "Rhea lending: smart-contract risk; a fully borrowed pool can delay withdraws.",
-  staking: "LiNEAR: unstake waits ~4 epochs (about 2-3 days) and can trade off peg.",
+  lending: "Rhea Lending: smart-contract risk; a fully borrowed pool can delay withdraws.",
+  staking: `LiNEAR: can trade off peg. ${STAKING_EXIT}`,
   hold: "Held in your account: no venue risk, no yield.",
 } as const;
 
@@ -21,7 +22,7 @@ export function RiskCard({ def, amount }: { def: BasketDef; amount: number }) {
   const swapped = def.legs.filter((l) => l.token !== "usdc");
   const share = swapped.reduce((a, l) => a + l.weight_bps, 0) / TOTAL_BPS;
   const swapIn = BigInt(Math.floor(useDebounced(net * share) * 1e6)); // usdc atoms
-  const q = useAsync(swapIn > 0n ? `quote:${swapIn}` : null, () => getQuote(tokenIdOf("usdc"), tokenIdOf("wnear"), swapIn.toString(), WNEAR_POOL));
+  const q = useAsync(swapIn > 0n ? `quote:${swapIn}` : null, () => getQuote(tokenIdOf("usdc"), tokenIdOf("wnear"), swapIn, 50, WNEAR_POOL));
   const tooBig = q.data ? swapIn > BigInt(q.data.max_safe_in) : false;
   const sources = [...new Set(def.legs.map((l) => l.source))];
 
