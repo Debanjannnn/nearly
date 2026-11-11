@@ -82,7 +82,7 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   const all = tokens.data ?? [];
   const from = FTS.find((t) => t.address === fromId);
   // Max = account ledger (get_balance), not ft_balance_of: withdraw only pays what the ledger holds
-  const ledger = useAsync(live && from ? `ledger:${account}:${from.address}` : null, () => getLedgerBalance(account!, from!.address));
+  const ledger = useAsync(live && fromId ? `ledger:${account}:${fromId}` : null, () => getLedgerBalance(account!, fromId!));
   const bal = ledger.data ?? undefined;
   const chains = sortChains(all);
   const onChain = tokensOn(all, chain);

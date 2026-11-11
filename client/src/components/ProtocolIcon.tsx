@@ -8,6 +8,8 @@ const MARK: Record<string, string> = {
   linear: "linear.svg",
   intents: "near-intents.png",
 };
+// square app-icon marks: a circle crop would cut their corners
+const SQUARE = new Set(["rhea-dex", "rhea-lending", "intents"]);
 
 export function ProtocolIcon({ protocol, size = 20, className }: { protocol: string; size?: number; className?: string }) {
   const file = MARK[protocol];
@@ -20,7 +22,7 @@ export function ProtocolIcon({ protocol, size = 20, className }: { protocol: str
       width={size}
       height={size}
       style={{ width: size, height: size }}
-      className={cn("shrink-0 rounded-full object-contain", className)}
+      className={cn("shrink-0 object-contain", SQUARE.has(protocol) ? "rounded-[22%]" : "rounded-full", className)}
     />
   );
 }

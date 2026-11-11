@@ -60,6 +60,11 @@ export function Navbar() {
     >
       <div className="grid h-16 w-full grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 md:px-6">
         <Link href="/" className="flex items-center gap-2 justify-self-start text-2xl font-semibold tracking-tight">
+          {/* nearly mark: an "n" arch in a rounded square */}
+          <svg viewBox="0 0 26 26" aria-hidden className="size-[26px] text-primary">
+            <rect width="26" height="26" rx="7" fill="currentColor" />
+            <path d="M8 19V12.5a5 5 0 0 1 10 0V19" fill="none" stroke="var(--background)" strokeWidth="3" strokeLinecap="round" />
+          </svg>
           <span className="relative">
             nearly
             <span className="absolute top-0 left-full -ml-px text-[10px] leading-none font-medium tracking-normal text-primary">beta</span>

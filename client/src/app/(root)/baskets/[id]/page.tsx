@@ -36,7 +36,9 @@ export default function BasketPage() {
   const { rates } = useRates();
   // backtest straight from history, $1,000 over the last year
   const sleeves = s ? parts(s) : [];
-  const bt = useAsync(s ? `bt:${s.id}` : null, () => runBacktest(s!.definition, "1000"));
+  // the compiler tracks s.definition as a dep, so read it null-safe here
+  const def = s?.definition;
+  const bt = useAsync(def ? `bt:${id}` : null, () => runBacktest(def!, "1000"));
   const [range, setRange] = useState<Range>("1W");
   const [mode, setMode] = useState<"line" | "candle">("candle");
   const { ms } = RANGES[range];
