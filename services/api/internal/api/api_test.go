@@ -34,6 +34,19 @@ func TestFeeRow(t *testing.T) {
 	}
 }
 
+func TestIntentRequest(t *testing.T) {
+	ok := func(in intentQuoteIn) bool { _, ok := in.request("a", "b", "r", "f"); return ok }
+	if !ok(intentQuoteIn{Amount: "1"}) || ok(intentQuoteIn{Amount: "0"}) || ok(intentQuoteIn{Amount: "1", SwapType: "ANY_INPUT"}) ||
+		ok(intentQuoteIn{Amount: "1", SlippageBps: 5000}) {
+		t.Fatal("validation")
+	}
+	in := intentQuoteIn{Amount: "1"}
+	q, ok2 := in.request("a", "b", "r", "")
+	if ok2 || q.SwapType != "EXACT_INPUT" || q.SlippageTolerance != 100 || q.Deadline.IsZero() {
+		t.Fatalf("empty refund accepted or bad defaults: %+v", q)
+	}
+}
+
 func TestFailStatus(t *testing.T) {
 	for err, want := range map[error]int{
 		ErrNotFound: 404, ErrRevoked: 409, ErrRPC: 502,
