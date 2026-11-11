@@ -33,6 +33,7 @@ type Poller struct {
 	pools map[uint64]quote.Pool
 	rates map[string]store.Rate
 	meta  map[string]venue.Meta
+	px    map[string]store.Price
 }
 
 func (p *Poller) Run(ctx context.Context, every time.Duration) error {
@@ -53,7 +54,7 @@ func (p *Poller) Run(ctx context.Context, every time.Duration) error {
 // Once polls everything; venue failures are logged and skipped, only Redis errors are returned.
 func (p *Poller) Once(ctx context.Context) error {
 	if p.pools == nil {
-		p.pools, p.rates, p.meta = map[uint64]quote.Pool{}, map[string]store.Rate{}, map[string]venue.Meta{}
+		p.pools, p.rates, p.meta, p.px = map[uint64]quote.Pool{}, map[string]store.Rate{}, map[string]venue.Meta{}, map[string]store.Price{}
 	}
 	now := p.Now().UnixMilli()
 	var errs []error
@@ -71,7 +72,15 @@ func (p *Poller) Once(ctx context.Context) error {
 	rates := slices.SortedFunc(maps.Values(p.rates), func(a, b store.Rate) int {
 		return cmp.Compare(a.Venue+a.Token, b.Venue+b.Token)
 	})
-	prices := p.prices(ctx, now)
+	for _, x := range p.prices(ctx, now) {
+		p.px[x.Token] = x
+	}
+	prices := []store.Price{}
+	for _, t := range []string{p.Dep.Tokens["usdc"], p.Dep.Tokens["wnear"], p.Dep.Venues.Staking} {
+		if x, ok := p.px[t]; ok {
+			prices = append(prices, x)
+		}
+	}
 	errs = append(errs, p.Store.Put(ctx, store.KeyRates, rates), p.Store.Put(ctx, store.KeyPrices, prices))
 	if err := errors.Join(errs...); err != nil {
 		return err

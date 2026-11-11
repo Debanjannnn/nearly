@@ -70,4 +70,8 @@ func TestOnce(t *testing.T) {
 	if len(rates) != 3 || rates[0].Ts != 1_000_000 {
 		t.Fatal(rates)
 	}
+	st.Get(ctx, store.KeyPrices, &prices)
+	if len(prices) != 3 || prices[2].Ts != 1_000_000 {
+		t.Fatal(prices)
+	}
 }
