@@ -2,23 +2,26 @@
 
 import { useState } from "react";
 import { createSchedule, errText } from "@/lib/api";
+import { parseAmount, USDC } from "@/lib/tokens";
 import { useSession } from "@/lib/session";
-import { decimalsOf, parseAmount } from "@/lib/tokens";
-import type { ScheduleInput, ScheduleKind } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import type { ScheduleInput, ScheduleKind, Target } from "@/lib/types";
 import { Button, ErrorBox, Label, Notice } from "@/components/ui";
 import { Segmented } from "@/components/motion";
-import { ExecutorCard } from "./ExecutorCard";
+import { showToast } from "@/components/TxToast";
+import { DelegationCard } from "./Delegation";
+import { cn } from "@/lib/utils";
 
-export const KIND_LABEL: Record<ScheduleKind, string> = {
-  recurring_buy: "Recurring buy",
-  dca: "DCA",
-  rebalance: "Rebalance",
+const KINDS: Record<Target["type"], ScheduleKind[]> = {
+  // token schedules have no backend yet
+  market: [],
+  position: ["rebalance"],
+  // each run deploys the amount into the basket (recurring buy: new position; DCA: tokens held in your account)
+  strategy: ["recurring_buy", "dca"],
 };
-const HINT: Record<ScheduleKind, string> = {
-  recurring_buy: "Each run buys the full basket as a new position.",
-  dca: "Each run buys the basket tokens and holds them in your account.",
-  rebalance: "Each run moves legs back to target weights once they drift past the band.",
+export const KIND_LABEL: Record<string, string> = {
+  dca: "DCA",
+  recurring_buy: "Recurring buy",
+  rebalance: "Rebalance",
 };
 
 const INTERVALS = [
@@ -28,6 +31,9 @@ const INTERVALS = [
   { value: "custom", label: "Custom" },
 ] as const;
 type IntervalOpt = (typeof INTERVALS)[number]["value"];
+
+const DEC = /^\d+(\.\d+)?$/;
+const pos = (s: string) => DEC.test(s.trim()) && Number(s) > 0;
 
 export const inputCls =
   "tnum w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-ring";
@@ -44,42 +50,41 @@ export function Field({ label, hint, children }: { label: string; hint?: React.R
   );
 }
 
-// target: a basket (recurring buy / DCA) or an open position (rebalance)
-export function ScheduleForm({ target, onCreated }: { target: { basket_id: string } | { position_id: string }; onCreated: () => void }) {
-  const { authenticated, login, keyStatus } = useSession();
-  const kinds: ScheduleKind[] = "basket_id" in target ? ["recurring_buy", "dca"] : ["rebalance"];
-  const [kind, setKind] = useState<ScheduleKind>(kinds[0]);
+// current / quote kept for the shared call shape (token pages pass a live price)
+export function ScheduleForm({ target, onCreated }: { target: Target; current?: number | null; onCreated: () => void; quote?: string }) {
+  const { address, delegated, ensureReady } = useSession();
+  const kinds = KINDS[target.type];
+  const [kind, setKind] = useState<ScheduleKind>(kinds[0] ?? "dca");
   const [amount, setAmount] = useState("25");
   const [every, setEvery] = useState<IntervalOpt>("86400");
   const [customMin, setCustomMin] = useState("30");
-  const [drift, setDrift] = useState("");
+  const [drift, setDrift] = useState("5");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
 
   const everySeconds = every === "custom" ? Math.round(Number(customMin) * 60) : Number(every);
+  const driftBps = Math.round(Number(drift) * 100);
 
   function build(): ScheduleInput | string {
-    if (!(everySeconds >= 60)) return "Interval must be at least 1 minute.";
+    if (!(everySeconds >= 60)) return kind === "rebalance" ? "Check cadence must be at least 1 minute." : "Interval must be at least 1 minute.";
     if (kind === "rebalance") {
-      const bps = Math.round(Number(drift) * 100);
-      if (drift.trim() && !(bps > 0 && bps <= 10_000)) return "Drift band must be 0.01%–100%.";
-      return { kind, position_id: (target as { position_id: string }).position_id, every_seconds: everySeconds, params: drift.trim() ? { drift_bps: bps } : {} };
+      if (drift.trim() && !(driftBps > 0 && driftBps <= 10_000)) return "Drift band must be 0.01%–100%.";
+      return { kind, position_id: target.id, every_seconds: everySeconds, params: drift.trim() ? { drift_bps: driftBps } : {} };
     }
-    const raw = parseAmount(amount, decimalsOf("usdc"));
+    const raw = pos(amount) ? parseAmount(amount, USDC.decimals) : null;
     if (!raw) return "Amount must be a positive USDC amount.";
-    return { kind, basket_id: (target as { basket_id: string }).basket_id, every_seconds: everySeconds, params: { amount: raw.toString() } };
+    return { kind, basket_id: target.id, every_seconds: everySeconds, params: { amount: raw.toString() } };
   }
 
   async function submit() {
     const input = build();
     setError(typeof input === "string" ? input : null);
     if (typeof input === "string") return;
+    if (!(await ensureReady())) return;
     setPending(true);
-    setDone(false);
     try {
       await createSchedule(input);
-      setDone(true);
+      showToast({ tone: "success", title: `${KIND_LABEL[kind]} scheduled` });
       onCreated();
     } catch (e) {
       setError(errText(e));
@@ -88,32 +93,12 @@ export function ScheduleForm({ target, onCreated }: { target: { basket_id: strin
     }
   }
 
-  if (!authenticated)
-    return (
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <span className="text-muted-foreground">Sign in to automate.</span>
-        <Button onClick={() => void login()}>Sign in</Button>
-      </div>
-    );
+  if (kinds.length === 0)
+    return <Notice tone="muted">Token DCA and take profit / stop loss are coming soon. Set a recurring buy on a basket today.</Notice>;
 
-  return (
-    <div className="space-y-4">
-      {kinds.length > 1 && (
-        <Segmented id={`schedule-kind-${kinds[0]}`} value={kind} onChange={(k) => (setKind(k), setError(null))} options={kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }))} />
-      )}
-      <p className="text-xs text-muted-foreground">{HINT[kind]}</p>
-
-      {kind === "rebalance" ? (
-        <Field label="Drift band (%)" hint="blank = basket rule">
-          <input className={inputCls} inputMode="decimal" placeholder="5" value={drift} onChange={(e) => setDrift(e.target.value)} />
-        </Field>
-      ) : (
-        <Field label="Buy per run (USDC)">
-          <input className={inputCls} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </Field>
-      )}
-
-      <Field label={kind === "rebalance" ? "Check every" : "Every"}>
+  const intervalPicker = (label: string) => (
+    <>
+      <Field label={label}>
         <div className="flex flex-wrap gap-1.5">
           {INTERVALS.map((o) => (
             <button
@@ -135,16 +120,46 @@ export function ScheduleForm({ target, onCreated }: { target: { basket_id: strin
           <input className={inputCls} inputMode="decimal" value={customMin} onChange={(e) => setCustomMin(e.target.value)} />
         </Field>
       )}
+    </>
+  );
+
+  return (
+    <div className="space-y-4">
+      {kinds.length > 1 && (
+        <Segmented
+          id={`schedule-kind-${target.type}`}
+          value={kind}
+          onChange={(k) => (setKind(k), setError(null))}
+          options={kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+        />
+      )}
+
+      {kind !== "rebalance" && (
+        <>
+          <Field label="Buy per run (USDC)">
+            <input className={inputCls} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </Field>
+          {intervalPicker("Every")}
+        </>
+      )}
+
+      {kind === "rebalance" && (
+        <>
+          <Field label="Drift band (%)" hint="blank = basket rules">
+            <input className={inputCls} inputMode="decimal" value={drift} onChange={(e) => setDrift(e.target.value)} />
+          </Field>
+          {intervalPicker("Check every")}
+        </>
+      )}
 
       {error && <ErrorBox message={error} />}
-      {done && <Notice tone="good">{KIND_LABEL[kind]} scheduled.</Notice>}
 
-      {keyStatus === "active" ? (
+      {delegated || !address ? (
         <Button className="w-full" pending={pending} onClick={() => void submit()}>
           Create {KIND_LABEL[kind].toLowerCase()}
         </Button>
       ) : (
-        <ExecutorCard compact />
+        <DelegationCard compact />
       )}
     </div>
   );

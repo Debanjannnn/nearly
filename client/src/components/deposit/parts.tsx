@@ -8,6 +8,7 @@ import { intentStatus, isDone, tokenLogos, txHash, txLink, type Intent, type Int
 import { cn } from "@/lib/utils";
 import { ErrorBox } from "@/components/ui";
 import { EASE } from "@/components/motion";
+import { ProtocolIcon } from "@/components/ProtocolIcon";
 
 // modal shell; Esc/backdrop unmount via state so the exit animation plays
 export function IntentDialog({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
@@ -40,7 +41,10 @@ export function IntentDialog({ title, subtitle, onClose, children }: { title: st
         </button>
       </div>
       {children}
-      <p className="text-center text-[11px] text-muted-foreground">Routed by NEAR Intents 1Click</p>
+      <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+        <ProtocolIcon protocol="intents" size={14} />
+        Routed by NEAR Intents 1Click
+      </p>
     </motion.dialog>
   );
 }

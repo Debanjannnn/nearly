@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence } from "motion/react";
 import { Send } from "lucide-react";
-import { getHoldings } from "@/lib/api";
+import { getLedgerBalance } from "@/lib/api";
 import { NETWORK } from "@/lib/config";
 import { useAsync, useDebounced } from "@/lib/hooks";
 import {
@@ -30,7 +30,7 @@ import { Chip, Field, inputCls, IntentDialog, IntentIcon, More, Trail, useIntent
 
 type Pending = { q: IntentQuote; from: Token; amount: string; dest: IntentToken; recipient: string; owner: string; sub: string; withdrawn?: boolean; sent?: boolean };
 const KIND = "withdraw";
-const FTS = TOKENS.filter((t) => t.id !== "near");
+const FTS = TOKENS.filter((t) => !!t.key);
 const TGAS = "000000000000";
 const STORAGE = "1250000000000000000000"; // 0.00125 NEAR, refunded if already registered
 
@@ -39,19 +39,20 @@ const register = (account_id: string) => fc("storage_deposit", { account_id, reg
 
 // account.withdraw pays the owner, then the owner sends it to the 1Click deposit address
 const withdrawTxs = (p: Pending) => [
-  { receiverId: p.from.id, actions: [register(p.owner), register(p.q.quote.depositAddress!)] },
-  { receiverId: p.sub, actions: [fc("withdraw", { token: p.from.id, amount: p.amount }, "1", `100${TGAS}`)] },
+  { receiverId: p.from.address, actions: [register(p.owner), register(p.q.quote.depositAddress!)] },
+  { receiverId: p.sub, actions: [fc("withdraw", { token: p.from.address, amount: p.amount }, "1", `100${TGAS}`)] },
 ];
 const transferTx = (p: Pending) => ({
-  receiverId: p.from.id,
+  receiverId: p.from.address,
   actions: [fc("ft_transfer", { receiver_id: p.q.quote.depositAddress!, amount: p.amount, memo: p.q.quote.depositMemo ?? null }, "1")],
 });
 
 export function AnyChainWithdrawButton({ className, children }: { className?: string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const { ensureReady } = useSession();
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={cn("inline-flex items-center gap-1.5 text-xs text-primary hover:underline", className)}>
+      <button type="button" onClick={() => void ensureReady().then((ok) => ok && setOpen(true))} className={cn("inline-flex items-center gap-1.5 text-xs text-primary hover:underline", className)}>
         {children ?? (
           <>
             <Send className="size-3.5" />
@@ -68,8 +69,8 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   const { accountId, account, authenticated, send } = useSession();
   const live = NETWORK === "mainnet" && authenticated && !!account && !!accountId;
   const tokens = useAsync(live ? "intent-tokens" : null, getIntentTokens);
-  const holdings = useAsync(live ? `holdings:${account}` : null, getHoldings);
-  const [fromId, setFromId] = useState(FTS[0]?.id);
+
+  const [fromId, setFromId] = useState(FTS[0]?.address);
   const [chain, setChain] = useState("base");
   const [assetId, setAssetId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
@@ -79,8 +80,10 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
 
   const all = tokens.data ?? [];
-  const from = FTS.find((t) => t.id === fromId);
-  const bal = Object.values(holdings.data?.tokens ?? {}).find((h) => h.token === from?.id)?.balance;
+  const from = FTS.find((t) => t.address === fromId);
+  // Max = account ledger (get_balance), not ft_balance_of: withdraw only pays what the ledger holds
+  const ledger = useAsync(live && from ? `ledger:${account}:${from.address}` : null, () => getLedgerBalance(account!, from!.address));
+  const bal = ledger.data ?? undefined;
   const chains = sortChains(all);
   const onChain = tokensOn(all, chain);
   const dest = onChain.find((t) => t.assetId === assetId) ?? onChain[0];
@@ -89,7 +92,7 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
   const over = raw !== null && bal !== undefined && raw > BigInt(bal);
   const ready = !!(from && dest && raw && raw > 0n && !over && validAddress(chain, to));
   const body = ready
-    ? { origin_asset: `nep141:${from!.id}`, destination_asset: dest!.assetId, amount: raw!.toString(), swap_type: "EXACT_INPUT" as const, recipient: to }
+    ? { origin_asset: `nep141:${from!.address}`, destination_asset: dest!.assetId, amount: raw!.toString(), swap_type: "EXACT_INPUT" as const, recipient: to }
     : null;
   const key = body ? JSON.stringify(body) : null;
   const settled = useDebounced(key);
@@ -140,7 +143,7 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
       {NETWORK !== "mainnet" ? (
         <p className="text-sm text-muted-foreground">NEAR Intents runs on mainnet only.</p>
       ) : !live ? (
-        <p className="text-sm text-muted-foreground">Sign in and create your account first.</p>
+        <p className="text-sm text-muted-foreground">Connect your wallet first.</p>
       ) : tokens.error ? (
         <ErrorBox message={`NEAR Intents unavailable: ${tokens.error}`} />
       ) : !tokens.data ? (
@@ -162,7 +165,7 @@ export function AnyChainWithdraw({ onClose }: { onClose: () => void }) {
               />
               <div className="flex shrink-0 gap-1">
                 {FTS.map((t) => (
-                  <Chip key={t.id} on={t.id === fromId} onClick={() => setFromId(t.id)}>
+                  <Chip key={t.address} on={t.address === fromId} onClick={() => setFromId(t.address)}>
                     {t.symbol}
                   </Chip>
                 ))}

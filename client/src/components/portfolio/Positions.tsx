@@ -4,28 +4,73 @@ import Link from "next/link";
 import { Fragment, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { errText, fmtTime, fmtUsd, withdrawPosition } from "@/lib/api";
-import type { PriceOf } from "@/lib/hooks";
-import { decimalsOf, fmtUnits, symbolOf, toUnits } from "@/lib/tokens";
-import type { Basket, Position } from "@/lib/types";
+import { FEE_BPS } from "@/lib/config";
+import { useTickers } from "@/lib/hooks";
+import { decimalsOf, fmtUnits, keyOf, toUnits, USDC } from "@/lib/tokens";
+import type { Position, Strategy } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button, Notice, StatusPill } from "@/components/ui";
-import { IconStack, TokenIcon } from "@/components/TokenIcon";
-import { Segmented } from "@/components/motion";
-import { ExecutionProgress } from "@/components/Execution";
+import { TokenIcon } from "@/components/TokenIcon";
+import { IconStack } from "@/components/IconStack";
 import { ScheduleForm } from "@/components/automation/ScheduleForm";
-import { SOURCE_LABEL, tokensOf, VENUE_NAME } from "@/components/basket/legs";
+import { ExecutionProgress } from "@/components/Execution";
+import { defaultVenue, KIND_LABEL, parts, STAKING_EXIT, venueName, protocolOf } from "@/components/earn/sources";
+import { ProtocolIcon } from "@/components/ProtocolIcon";
+import { Segmented } from "@/components/motion";
 
 const SELL_PCTS = ["25", "50", "75", "100"] as const;
+export const STABLES = new Set(["USDC"]);
 
-export const depositUsd = (p: Position) => toUnits(p.deposit, decimalsOf("usdc"));
+type PriceOf = (sym: string) => number | null;
 
-// held legs at spot; null = basket or a price unknown
-// shortcut: venue yield accrued since the last run is not marked, read venue balances via RPC if exact value matters
-export function positionValue(p: Position, b: Basket | undefined, priceOf: PriceOf): number | null {
-  if (!b || p.state === "closed") return p.state === "closed" ? 0 : null;
-  return b.definition.legs.reduce<number | null>((v, l, i) => {
-    const px = priceOf(l.token);
-    return v === null || px === null ? null : v + toUnits(p.held[i] ?? "0", decimalsOf(l.token)) * px;
+// spot USD price per token symbol from live tickers (stables = $1); null = no quote yet
+export function usePriceOf(): PriceOf {
+  const { tickers } = useTickers();
+  return (sym) => (STABLES.has(sym) ? 1 : (tickers[sym]?.price ?? null));
+}
+
+// basket legs grouped by token, each with what the position holds (atoms, same order as the legs)
+const groupsOf = (p: Position, s: Strategy | undefined) =>
+  parts(s ?? { sleeves: [] }).map((sl) => {
+    const key = keyOf(sl.asset);
+    const legs = (s?.definition.legs ?? []).flatMap((l, i) => (l.token === key ? [{ ...l, held: p.held[i] ?? "0" }] : []));
+    return { token: sl.asset, legs, dec: decimalsOf(key) };
+  });
+
+const principalOf = (p: Position) => toUnits(p.deposit, USDC.decimals);
+
+// Entry / mark on the basket's own index (Σ weight × token price, as the basket chart). A token's entry is its effective
+// fill: USDC put into it (deposit after the open fee × weight) ÷ tokens received.
+// shortcut: legs change on rebalance, so entry drifts after one; store fill prices at deploy if exact entry matters
+export function positionPrices(p: Position, s: Strategy | undefined, priceOf: PriceOf) {
+  if (!s) return { entry: null, mark: null };
+  const net = principalOf(p) * (1 - FEE_BPS / 10000);
+  const groups = groupsOf(p, s);
+  let entry: number | null = 0;
+  let mark: number | null = 0;
+  for (const sl of parts(s)) {
+    const w = sl.weightBps / 10000;
+    const px = priceOf(sl.asset);
+    mark = mark === null || px === null ? null : mark + w * px;
+    if (STABLES.has(sl.asset)) {
+      entry = entry === null ? null : entry + w;
+      continue;
+    }
+    const g = groups.find((x) => x.token === sl.asset);
+    const held = g?.legs.reduce((a, l) => a + toUnits(l.held, g.dec), 0) ?? 0;
+    entry = entry === null || held <= 0 ? null : entry + (w * (net * w)) / held;
+  }
+  return { entry, mark };
+}
+
+// spot value: held tokens at spot
+// shortcut: venue yield accrued since the last run is not marked; read venue balances via RPC if exact value matters
+export function valueOf(p: Position, s: Strategy | undefined, priceOf: PriceOf) {
+  if (!s) return null;
+  return groupsOf(p, s).reduce<number | null>((v, g) => {
+    const px = priceOf(g.token);
+    if (v === null || px === null) return null;
+    return g.legs.reduce((a, l) => a + toUnits(l.held, g.dec) * px, v);
   }, 0);
 }
 
@@ -33,25 +78,26 @@ const signed = (n: number) => (n >= 0 ? "text-positive" : "text-destructive");
 
 export function PositionsTable({
   positions,
-  basketOf,
-  priceOf,
+  strategyOf,
   onChange,
 }: {
   positions: Position[];
-  basketOf: (id: string) => Basket | undefined;
-  priceOf: PriceOf;
+  strategyOf: (id: string) => Strategy | undefined;
   onChange: () => void;
 }) {
+  const priceOf = usePriceOf();
   const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="overflow-x-auto rounded-3xl border border-border bg-card">
-      <table className="w-full min-w-[760px] text-sm">
+      <table className="w-full min-w-[860px] text-sm">
         <thead className="text-left text-xs text-muted-foreground">
           <tr className="border-b border-border">
             <th className="py-3 pl-5 font-normal">Basket</th>
-            <th className="px-3 py-3 text-right font-normal">Deposit</th>
+            <th className="px-3 py-3 text-right font-normal">Size</th>
+            <th className="px-3 py-3 text-right font-normal">Entry price</th>
+            <th className="px-3 py-3 text-right font-normal">Mark price</th>
             <th className="px-3 py-3 text-right font-normal">Value</th>
-            <th className="px-3 py-3 text-right font-normal">PnL</th>
+            <th className="px-3 py-3 text-right font-normal">PnL (ROE)</th>
             <th className="px-3 py-3 font-normal">Opened</th>
             <th className="px-3 py-3 font-normal">Status</th>
             <th className="py-3 pr-5" />
@@ -59,10 +105,11 @@ export function PositionsTable({
         </thead>
         <tbody className="tnum">
           {positions.map((p) => {
-            const b = basketOf(p.basket_id);
-            const dep = depositUsd(p);
-            const value = p.state === "closed" ? null : positionValue(p, b, priceOf);
-            const pnl = value !== null ? value - dep : null;
+            const s = strategyOf(p.basket_id);
+            const { entry, mark } = positionPrices(p, s, priceOf);
+            const value = p.state === "closed" ? null : valueOf(p, s, priceOf);
+            const principal = principalOf(p);
+            const pnl = value !== null ? value - principal : null;
             const expanded = open === p.id;
             return (
               <Fragment key={p.id}>
@@ -72,16 +119,18 @@ export function PositionsTable({
                 >
                   <td className="py-3 pl-5">
                     <div className="flex items-center gap-3">
-                      <IconStack tokens={b ? tokensOf(b.definition) : ["usdc"]} size={22} ring="ring-card" />
+                      <IconStack symbols={s ? parts(s).map((sl) => sl.asset) : ["USDC"]} size={22} ring="ring-card" />
                       <Link href={`/baskets/${p.basket_id}`} onClick={(e) => e.stopPropagation()} className="truncate font-medium hover:underline">
                         {p.basket_name}
                       </Link>
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-right">{fmtUsd(dep)}</td>
+                  <td className="px-3 py-3 text-right">{fmtUsd(principal)}</td>
+                  <td className="px-3 py-3 text-right">{entry !== null ? fmtUsd(entry) : "-"}</td>
+                  <td className="px-3 py-3 text-right">{mark !== null ? fmtUsd(mark) : "-"}</td>
                   <td className="px-3 py-3 text-right">{value !== null ? fmtUsd(value) : "-"}</td>
                   <td className={cn("px-3 py-3 text-right", pnl !== null && signed(pnl))}>
-                    {pnl !== null && dep > 0 ? `${pnl >= 0 ? "+" : ""}${fmtUsd(pnl)} (${pnl >= 0 ? "+" : ""}${((pnl / dep) * 100).toFixed(2)}%)` : "-"}
+                    {pnl !== null && principal > 0 ? `${pnl >= 0 ? "+" : ""}${fmtUsd(pnl)} (${pnl >= 0 ? "+" : ""}${((pnl / principal) * 100).toFixed(2)}%)` : "-"}
                   </td>
                   <td className="px-3 py-3 text-xs whitespace-nowrap text-muted-foreground">{fmtTime(p.created_at)}</td>
                   <td className="px-3 py-3">
@@ -93,8 +142,8 @@ export function PositionsTable({
                 </tr>
                 {expanded && (
                   <tr className="border-b border-border bg-secondary/10">
-                    <td colSpan={7} className="px-5 py-4">
-                      <PositionDetail p={p} b={b} onChange={onChange} />
+                    <td colSpan={9} className="px-5 py-4">
+                      <PositionDetail p={p} s={s} onChange={onChange} />
                     </td>
                   </tr>
                 )}
@@ -107,21 +156,22 @@ export function PositionsTable({
   );
 }
 
-// expanded row: legs, partial / resume sell, rebalance schedule, live execution
-function PositionDetail({ p, b, onChange }: { p: Position; b: Basket | undefined; onChange: () => void }) {
+// expanded row: legs, sell, rebalance schedule, live execution
+function PositionDetail({ p, s, onChange }: { p: Position; s: Strategy | undefined; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [execId, setExecId] = useState<string | null>(null);
   const [auto, setAuto] = useState(false);
   const [sellPct, setSellPct] = useState<(typeof SELL_PCTS)[number]>("100");
   // withdrawing = a sell that stalled; the api resumes it from its last step
-  const stalled = p.state === "withdrawing";
+  const closing = p.state === "withdrawing";
+  const groups = groupsOf(p, s);
 
-  async function sell() {
+  async function withdraw() {
     setBusy(true);
     setErr(null);
     try {
-      const r = await withdrawPosition(p.id, Number(sellPct) * 100);
+      const r = await withdrawPosition(p.id, closing ? 10000 : Number(sellPct) * 100);
       if (r.execution_id) setExecId(r.execution_id);
       else onChange(); // nothing left on chain: settled at once
     } catch (e) {
@@ -133,43 +183,43 @@ function PositionDetail({ p, b, onChange }: { p: Position; b: Basket | undefined
 
   return (
     <div className="space-y-3">
-      {b ? (
-        <ul className="grid gap-x-8 gap-y-1 text-xs md:grid-cols-2">
-          {b.definition.legs.map((l, i) => (
-            <li key={i} className="flex items-center gap-2">
-              <TokenIcon token={l.token} size={14} />
-              <span className="rounded-md bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">{SOURCE_LABEL[l.source]}</span>
-              {VENUE_NAME[l.source]}
+      <ul className="grid gap-x-8 gap-y-1 text-xs md:grid-cols-2">
+        {groups.flatMap((g) =>
+          g.legs.map((l, i) => (
+            <li key={`${g.token}${i}`} className="flex items-center gap-2">
+              <TokenIcon symbol={g.token} size={14} />
+              <span className="rounded-md bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">{KIND_LABEL[l.source]}</span>
+              <ProtocolIcon protocol={protocolOf(defaultVenue(l.source))} size={14} />
+              {venueName(defaultVenue(l.source))}
               <span className="tnum ml-auto text-muted-foreground">
-                {fmtUnits(p.held[i] ?? "0", decimalsOf(l.token), 4)} {symbolOf(l.token)}
+                {fmtUnits(l.held, g.dec)} {g.token}
               </span>
             </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">Basket details unavailable.</p>
-      )}
+          )),
+        )}
+      </ul>
       <p className="text-[11px] text-muted-foreground">
-        Value marks held tokens at spot; venue yield accrues on the venue. Selling unwinds each leg and sends the tokens to your wallet as they are, no fee.
+        Value marks held tokens at spot; lending/staking yield accrues on-venue. Selling unwinds each leg and sends the tokens to your wallet, no fee.
       </p>
-      {stalled && <Notice>A sell stopped part way. Resume runs only the steps still left on chain.</Notice>}
+      {s?.definition.legs.some((l) => l.source === "staking") && <Notice tone="muted">{STAKING_EXIT}</Notice>}
+      {closing && <Notice>A sell stopped part way. Resume runs only the steps still left on chain.</Notice>}
       {err && <Notice tone="bad">{err}</Notice>}
-      {(p.state === "open" || stalled) && (
+      {(p.state === "open" || closing) && (
         <div className="flex flex-wrap items-center gap-2">
-          {!stalled && (
+          {!closing && (
             <Segmented id={`sell-${p.id}`} value={sellPct} onChange={setSellPct} options={SELL_PCTS.map((v) => ({ value: v, label: `${v}%` }))} className="w-auto" />
           )}
-          <Button variant="ghost" pending={busy} onClick={() => void sell()}>
-            {stalled ? "Resume sell" : `Sell ${sellPct}%`}
+          <Button variant="ghost" pending={busy} onClick={() => void withdraw()}>
+            {closing ? "Resume sell" : "Sell"} to wallet
           </Button>
-          {!stalled && (
+          {!closing && (
             <Button variant="ghost" onClick={() => setAuto((a) => !a)}>
-              {auto ? "Hide rebalance" : "Rebalance schedule"}
+              {auto ? "Hide automation" : "Rebalance"}
             </Button>
           )}
         </div>
       )}
-      {auto && <ScheduleForm target={{ position_id: p.id }} onCreated={() => setAuto(false)} />}
+      {auto && <ScheduleForm target={{ type: "position", id: p.id }} onCreated={() => setAuto(false)} />}
       {execId && <ExecutionProgress id={execId} onSettled={onChange} />}
     </div>
   );
