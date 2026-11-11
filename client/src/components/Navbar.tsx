@@ -10,6 +10,8 @@ import { useCopy } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { Row, Spinner, useDismissable } from "./ui";
+import { AnyChainButton } from "./deposit/AnyChainDeposit";
+import { AnyChainWithdrawButton } from "./deposit/AnyChainWithdraw";
 
 const NAV = [
   { label: "Baskets", href: "/baskets" },
@@ -96,6 +98,8 @@ export function Navbar() {
   );
 }
 
+const MENU_BTN = "flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline";
+
 function WalletMenu() {
   const { accountId, account, logout, error } = useSession();
   const { open, setOpen, ref } = useDismissable();
@@ -118,6 +122,10 @@ function WalletMenu() {
             {account && <AccountRow label="Account" id={account} />}
             <Row label="Network">NEAR {NETWORK}</Row>
           </dl>
+          <div className="flex gap-2">
+            <AnyChainButton className={MENU_BTN} />
+            <AnyChainWithdrawButton className={MENU_BTN} />
+          </div>
           {error && <p className="text-xs break-words text-destructive">{error}</p>}
           <button
             onClick={() => void logout()}
