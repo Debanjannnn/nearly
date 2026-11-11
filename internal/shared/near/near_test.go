@@ -72,3 +72,30 @@ func TestAccountAndTx(t *testing.T) {
 		t.Fatal(s, err)
 	}
 }
+
+func TestViewAtAndBlock(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Method string         `json:"method"`
+			Params map[string]any `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		got = req.Params
+		if req.Method == "block" {
+			w.Write([]byte(`{"result":{"header":{"height":9,"timestamp":1794334904215303470}}}`))
+			return
+		}
+		w.Write([]byte(`{"result":{"result":[52,50]}}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	var n int
+	if err := c.ViewAt(context.Background(), 9, "x", "get", nil, &n); err != nil || n != 42 || got["block_id"] != 9.0 || got["finality"] != nil {
+		t.Fatal(n, err, got)
+	}
+	h, err := c.Block(context.Background(), 0)
+	if err != nil || h.Height != 9 || h.Timestamp != 1794334904215303470 || got["finality"] != "final" {
+		t.Fatal(h, err, got)
+	}
+}
