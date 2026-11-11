@@ -67,9 +67,10 @@ where p.id=$1 and p.state='open' and not exists(select 1 from executions where p
 
 // Job is one execution a schedule fires.
 type Job struct {
-	Kind       string // executions.kind: dca | deploy | rebalance
-	PositionID string // rebalance target; "" otherwise
-	Open       string // recurring buy: deposit atoms of the position this deploy opens
+	Kind       string   // executions.kind: dca | deploy | rebalance
+	PositionID string   // rebalance target; "" otherwise
+	Held       []string // rebalance: held the plan was built on; changed since = skip
+	Open       string   // recurring buy: deposit atoms of the position this deploy opens
 	Params     map[string]any
 	Steps      []planner.Step
 }
@@ -82,7 +83,7 @@ func (p Store) Claim(ctx context.Context, d Due, next time.Time, j *Job) (execID
 			// same row lock as the api withdraw claim, so the two never overlap
 			var busy bool
 			err := tx.QueryRow(ctx, `select exists(select 1 from executions where position_id=$1 and status in ('pending','running'))
-from positions where id=$1 and state='open' for update`, j.PositionID).Scan(&busy)
+from positions where id=$1 and state='open' and held=$2::jsonb for update`, j.PositionID, j.Held).Scan(&busy)
 			if errors.Is(err, pgx.ErrNoRows) || busy {
 				return nil
 			}

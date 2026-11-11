@@ -177,7 +177,7 @@ func (s *Scheduler) fire(ctx context.Context, d Due, now time.Time) error {
 		if err != nil || len(plan.Steps) == 0 {
 			return err // inside the band: slot stays due, rechecked next tick
 		}
-		j = Job{Kind: "rebalance", PositionID: *d.PositionID, Steps: plan.Steps, Params: map[string]any{"held_after": plan.Held, "schedule_id": d.ID}}
+		j = Job{Kind: "rebalance", PositionID: *d.PositionID, Held: held, Steps: plan.Steps, Params: map[string]any{"held_after": plan.Held, "schedule_id": d.ID}}
 		after = func(ctx context.Context, execID string, _ int, ok bool) {
 			if !ok {
 				return // shortcut: a half-done rebalance keeps old held; read chain balances if that drifts
