@@ -22,6 +22,7 @@ type Result struct {
 type Client struct {
 	URL    string
 	Secret string
+	Caller string // X-Caller, e.g. "api", "scheduler"
 	HTTP   *http.Client
 }
 
@@ -36,7 +37,7 @@ func (c *Client) Execute(ctx context.Context, account, executionID string, steps
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	httpx.SetInternal(req, c.Secret, "api")
+	httpx.SetInternal(req, c.Secret, c.Caller)
 	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
