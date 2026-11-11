@@ -58,7 +58,7 @@ func run() error {
 	defer db.Close()
 	ch := &chain.Chain{RPC: near.New(rpcURL), Dep: dep, ExecutorKey: execKey}
 	mux := httpx.NewMux(map[string]httpx.Check{"postgres": db.Ping})
-	(&api.Server{
+	srv := &api.Server{
 		Store:       api.Store{DB: db},
 		Chain:       ch,
 		Exec:        &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, HTTP: &http.Client{Timeout: 15 * time.Minute}},
@@ -66,7 +66,10 @@ func run() error {
 		Plan:        &planner.Planner{Tokens: dep.Tokens, Q: ch, SlippageBps: slip},
 		Dep:         dep,
 		ExecutorKey: execKey,
-	}).Routes(mux)
+	}
+	srv.Routes(mux)
 	slog.Info("listening", "addr", addr, "network", network)
-	return httpx.Run(ctx, addr, httpx.CORS(origins, mux))
+	err = httpx.Run(ctx, addr, httpx.CORS(origins, mux))
+	srv.Wait() // let in-flight executor runs record results before db closes
+	return err
 }
