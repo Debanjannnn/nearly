@@ -46,9 +46,8 @@ func Ledger(ctx context.Context, rpc *near.Client, account string) (map[string]*
 	return out, nil
 }
 
-// Apply returns the corrected held per position and what sits on chain in no position (idle).
-// A slot holding less than the positions claim scales them down pro rata; a surplus stays idle,
-// because deposits not yet deployed and leftovers of a failed deploy are not any position's.
+// Apply returns corrected held per position and on-chain surplus in no position (idle).
+// A short slot scales its claims down pro rata; a surplus (undeployed deposit, failed deploy) stays idle.
 func Apply(ledger map[string]*big.Int, ps []Position, tokens map[string]string) (held [][]*big.Int, idle map[string]*big.Int) {
 	claimed := map[string]*big.Int{}
 	held = make([][]*big.Int, len(ps))
