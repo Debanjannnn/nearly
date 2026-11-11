@@ -1,0 +1,3 @@
+# near-sdk only wires host fns (panics, logs) under `--cfg near`; cargo-near sets it, plain cargo needs this.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "near"]
