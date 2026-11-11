@@ -3,12 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
-import { getBaskets } from "@/lib/api";
-import { useAsync } from "@/lib/hooks";
-import { KEYS, symbolOf } from "@/lib/tokens";
+import { getStrategies } from "@/lib/api";
+import { useAsync } from "@/lib/session";
+import { LISTED, pairsOf } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
-import { IconStack } from "@/components/TokenIcon";
-import { legLabel, sourcesFor, SOURCE_LABEL, tokensOf } from "@/components/basket/legs";
+import { IconStack } from "@/components/IconStack";
+import { parts } from "@/components/earn/sources";
 import { EASE } from "@/components/motion";
 import { AnimatePresence, motion, useIsPresent } from "motion/react";
 
@@ -107,28 +107,21 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
   const list = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
-  const strategies = useAsync("baskets", getBaskets);
+  const strategies = useAsync("strategies", () => getStrategies());
   const present = useIsPresent();
 
   useEffect(() => ref.current?.showModal(), []);
 
   const s = q.trim().toLowerCase();
   const all = [
-    ...KEYS.map((k) => ({
-      key: k,
-      href: `/baskets?token=${k}`,
-      title: symbolOf(k),
-      tag: "Token",
-      sub: `Baskets with ${symbolOf(k)} · ${sourcesFor(k).map((x) => SOURCE_LABEL[x]).join(", ")}`,
-      icons: [k],
-    })),
+    ...LISTED.map((m) => ({ key: m.symbol, href: `/trade/${m.symbol}`, title: m.token.name, tag: `$${m.token.symbol}`, sub: `Token · Rhea DEX / ${pairsOf(m).map((p) => p.quote.symbol).join(", ")}`, icons: [m.token.symbol] })),
     ...(strategies.data ?? []).map((st) => ({
       key: st.id,
       href: `/baskets/${st.id}`,
       title: st.name,
       tag: "Basket",
-      sub: st.definition.legs.map(legLabel).join(" | "),
-      icons: tokensOf(st.definition),
+      sub: parts(st).map((sl) => `${sl.asset} · ${sl.sources.map((x) => x.kind).join(", ")}`).join(" | "),
+      icons: parts(st).map((sl) => sl.asset),
     })),
   ];
   const items = all.filter((it) => !s || [it.title, it.tag, it.sub].some((v) => v.toLowerCase().includes(s)));
@@ -197,7 +190,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
             onClick={() => go(it.href)}
             className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-2 text-left transition-colors duration-150 aria-selected:bg-secondary"
           >
-            <IconStack tokens={it.icons} size={28} ring="ring-popover" />
+            <IconStack symbols={it.icons} size={28} ring="ring-popover" />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="flex items-center gap-2">
                 <span className="truncate font-medium">{it.title}</span>

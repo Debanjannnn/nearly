@@ -123,11 +123,9 @@ const STATUS_TONE: Record<string, keyof typeof TONE> = {
   confirmed: "good",
   succeeded: "good",
   active: "good",
+  submitted: "warn",
   running: "warn",
   withdrawing: "warn",
-  paused: "muted",
-  revoked: "bad",
-  submitted: "warn",
   pending: "warn",
   failed: "bad",
   reverted: "bad",
@@ -137,6 +135,7 @@ const STATUS_TONE: Record<string, keyof typeof TONE> = {
   closed: "muted",
   cancelled: "muted",
   rejected: "muted",
+  paused: "muted",
 };
 
 export function StatusPill({ status }: { status: string }) {

@@ -4,24 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Check, Copy, Menu, Wallet as WalletIcon } from "lucide-react";
-import { shortId } from "@/lib/api";
-import { accountUrl, NETWORK } from "@/lib/config";
-import { useCopy } from "@/lib/hooks";
+import { fmtNum, shortHash } from "@/lib/api";
+import { addressUrl, NETWORK } from "@/lib/config";
+import { useCopy, useHoldings } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { BasketSearch } from "./BasketSearch";
 import { Row, Spinner, useDismissable } from "./ui";
-import { AnyChainButton } from "./deposit/AnyChainDeposit";
-import { AnyChainWithdrawButton } from "./deposit/AnyChainWithdraw";
+import { AnyChainButton } from "@/components/deposit/AnyChainDeposit";
+import { AnyChainWithdrawButton } from "@/components/deposit/AnyChainWithdraw";
 
 const NAV = [
+  { label: "Trade", href: "/" },
   { label: "Baskets", href: "/baskets" },
   { label: "Portfolio", href: "/portfolio" },
+  { label: "Risk", href: "/risk" },
 ] as const;
 
 export function Navbar() {
   const pathname = usePathname();
-  const { ready, accountId, authenticated, account, login, pending } = useSession();
+  const { ready, authenticated, address, login, pending } = useSession();
   const { open: menuOpen, setOpen: setMenuOpen, ref: menuRef } = useDismissable();
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -30,6 +32,8 @@ export function Navbar() {
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" || pathname.startsWith("/trade") : pathname.startsWith(href);
   const links = (cls: string) =>
     NAV.map((item) => (
       <Link
@@ -39,7 +43,7 @@ export function Navbar() {
         className={cn(
           cls,
           "font-medium transition-colors duration-150",
-          pathname.startsWith(item.href) ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+          isActive(item.href) ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         )}
       >
         {item.label}
@@ -54,14 +58,17 @@ export function Navbar() {
         scrolled ? "border-border bg-background/90 backdrop-blur-md" : "border-transparent bg-transparent",
       )}
     >
-      <div className="flex h-16 w-full items-center justify-between gap-4 px-4 md:px-6">
-        <Link href="/" className="relative text-2xl font-semibold tracking-tight">
-          nearly
-          <span className="absolute top-0 left-full ml-0.5 text-[10px] leading-none font-medium tracking-normal text-primary">{NETWORK}</span>
+      <div className="grid h-16 w-full grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 md:px-6">
+        <Link href="/" className="flex items-center gap-2 justify-self-start text-2xl font-semibold tracking-tight">
+          <span className="relative">
+            nearly
+            <span className="absolute top-0 left-full -ml-px text-[10px] leading-none font-medium tracking-normal text-primary">beta</span>
+          </span>
         </Link>
 
+        <BasketSearch />
+
         <div className="flex items-center justify-end gap-2 sm:gap-6">
-          <BasketSearch />
           <nav aria-label="Main navigation" className="hidden items-center gap-6 md:flex">
             {links("inline-flex h-10 items-center px-2 text-[15px]")}
           </nav>
@@ -82,7 +89,7 @@ export function Navbar() {
           </div>
           {!ready ? (
             <Spinner />
-          ) : accountId && authenticated && account ? (
+          ) : authenticated && address ? (
             <WalletMenu />
           ) : (
             <button
@@ -91,7 +98,7 @@ export function Navbar() {
               className="inline-flex h-9 items-center gap-2 rounded-full bg-primary px-3.5 text-sm font-semibold whitespace-nowrap text-primary-foreground transition-[background-color,scale] duration-150 hover:bg-primary/90 active:scale-[0.96] disabled:opacity-70"
             >
               {pending && <span className="size-3 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
-              {!accountId ? "Connect wallet" : !authenticated ? "Sign in" : "Create account"}
+              Connect
             </button>
           )}
         </div>
@@ -100,10 +107,8 @@ export function Navbar() {
   );
 }
 
-const MENU_BTN = "flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline";
-
 function WalletMenu() {
-  const { accountId, account, logout, error, keyStatus } = useSession();
+  const { address, mainAddress, logout, error } = useSession();
   const { open, setOpen, ref } = useDismissable();
 
   return (
@@ -115,51 +120,108 @@ function WalletMenu() {
         className="tnum inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-3.5 text-sm font-medium transition-colors hover:bg-accent"
       >
         <WalletIcon className="size-4 text-muted-foreground" />
-        {shortId(accountId ?? "")}
+        {mainAddress ? shortHash(mainAddress) : "Connected"}
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-border bg-popover p-4 text-sm shadow-xl">
-          <dl className="space-y-1">
-            {accountId && <AccountRow label="Wallet" id={accountId} />}
-            {account && <AccountRow label="Account" id={account} />}
-            <Row label="Network">NEAR {NETWORK}</Row>
-            {keyStatus && <Row label="Automation key">{keyStatus}</Row>}
-          </dl>
-          <div className="flex gap-2">
-            <AnyChainButton className={MENU_BTN} />
-            <AnyChainWithdrawButton className={MENU_BTN} />
-          </div>
-          {error && <p className="text-xs break-words text-destructive">{error}</p>}
-          <button
-            onClick={() => void logout()}
-            className="rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-xs transition-colors hover:bg-secondary"
-          >
-            Log out
-          </button>
+          {!address ? (
+            <Spinner label="Creating your account…" />
+          ) : (
+            <>
+              <dl className="space-y-1">
+                {mainAddress && <AddressRow label="Wallet" address={mainAddress} />}
+                <AddressRow label="Account" address={address} />
+              </dl>
+              <Wallet />
+              <div className="flex gap-2">
+                <AnyChainButton className="flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
+                <AnyChainWithdrawButton className="flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
+              </div>
+              <Automation />
+              {error && <p className="text-xs break-words text-destructive">{error}</p>}
+              <div className="flex gap-2 pt-1">
+                <MenuButton onClick={() => void logout()}>Log out</MenuButton>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// short account id → explorer, with copy
-function AccountRow({ label, id }: { label: string; id: string }) {
+// short address → explorer, with copy
+function AddressRow({ label, address }: { label: string; address: string }) {
   const { copied, copy } = useCopy();
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="flex items-center gap-0.5">
-        <a href={accountUrl(id)} target="_blank" rel="noreferrer" title={id} className="tnum underline-offset-4 hover:underline">
-          {shortId(id)}
+        <a href={addressUrl(address)} target="_blank" rel="noreferrer" title={address} className="tnum underline-offset-4 hover:underline">
+          {shortHash(address)}
         </a>
         <button
-          onClick={() => copy(id)}
-          aria-label={`Copy ${label.toLowerCase()} id`}
+          onClick={() => copy(address)}
+          aria-label={`Copy ${label.toLowerCase()} address`}
           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground"
         >
-          {copied === id ? <Check className="size-3.5 text-positive" /> : <Copy className="size-3.5" />}
+          {copied === address ? <Check className="size-3.5 text-positive" /> : <Copy className="size-3.5" />}
         </button>
       </dd>
     </div>
+  );
+}
+
+function Wallet() {
+  const h = useHoldings();
+  const amt = (sym: string) => {
+    const t = h.data?.tokens.find((x) => x.symbol === sym);
+    return t ? fmtNum(Number(t.amount)) : h.data ? "0" : "…";
+  };
+  return (
+    <div className="space-y-2">
+      <dl className="space-y-2">
+        <Row label="Network">NEAR {NETWORK}</Row>
+        <Row label="USDC">{amt("USDC")}</Row>
+        <Row label="NEAR (gas)">{amt("NEAR")}</Row>
+      </dl>
+      {h.error && <p className="text-xs text-warning">Balances unavailable: {h.error}</p>}
+    </div>
+  );
+}
+
+// executor function-call key: lets schedules / baskets run while offline
+function Automation() {
+  const { delegated, delegate, revoke, delegating, delegationError, keyStatus } = useSession();
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2">
+          <span className="text-muted-foreground">Automation</span>
+          <span className={cn("rounded-md px-1.5 py-0.5 text-[11px]", delegated ? "bg-positive/15 text-positive" : "bg-secondary text-muted-foreground")}>
+            {delegated ? "On" : "Off"}
+          </span>
+        </span>
+        <MenuButton disabled={delegating || (!delegated && keyStatus === "revoked")} onClick={() => void (delegated ? revoke() : delegate())}>
+          {delegating ? "…" : delegated ? "Revoke" : "Enable"}
+        </MenuButton>
+      </div>
+      {delegated && <p className="text-xs text-muted-foreground">Revoking stops every schedule.</p>}
+      {delegationError && <p className="text-xs break-words text-destructive">{delegationError}</p>}
+    </div>
+  );
+}
+
+function MenuButton({
+  children,
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...rest}
+      className="rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-xs transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:text-muted-foreground"
+    >
+      {children}
+    </button>
   );
 }
