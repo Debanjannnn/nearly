@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
-import { fmtTime, getBasket, getPositions, pct, runBacktest, shortId } from "@/lib/api";
+import { errText, fmtTime, getBasket, getPositions, pct, runBacktest, shortId } from "@/lib/api";
 import { accountUrl } from "@/lib/config";
 import { useAsync, usePrices, useRates } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -35,7 +35,7 @@ export function BasketDetail({ id }: { id: string }) {
   // shortcut: backtest runs per view straight from history; cache server-side if traffic grows
   const bt = useAsync(b ? `bt:${b.id}` : null, () => runBacktest(b!.definition));
 
-  if (st.error === "not_found")
+  if (st.error === errText(new Error("not_found")))
     return (
       <main className="w-full px-4 pt-8 pb-24 md:px-6">
         <Panel className="mx-auto max-w-md p-8 text-center">

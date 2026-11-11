@@ -60,7 +60,7 @@ export const setToken = (t: string | null) => {
   token = t;
 };
 
-async function authed<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function authed<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   if (!token) throw new ApiError(401, "unauthorized");
   return request<T>(API_URL + path, {
     method,

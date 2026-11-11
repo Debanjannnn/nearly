@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errMsg, getExecution, getHoldings, getPrices, getRates } from "./api";
+import { errText, getExecution, getHoldings, getPrices, getRates } from "./api";
 import { useSession } from "./session";
 import { tokenIdOf } from "./tokens";
 import type { Execution, Prices, Rates } from "./types";
@@ -42,7 +42,7 @@ export function useAsync<T>(key: string | null, fn: () => Promise<T>, pollMs?: n
     let live = true;
     fn()
       .then((data) => live && setS({ key, nonce, data, error: null }))
-      .catch((e) => live && setS((p) => ({ key, nonce, data: p.key === key ? p.data : null, error: errMsg(e) })));
+      .catch((e) => live && setS((p) => ({ key, nonce, data: p.key === key ? p.data : null, error: errText(e) })));
     return () => {
       live = false;
     };
@@ -115,7 +115,7 @@ export function useExecution(id: string | null) {
         if (!DONE.has(data.status)) t = setTimeout(tick, 2000);
       } catch (e) {
         if (!live) return;
-        setEx((p) => ({ id, data: p?.id === id ? p.data : null, error: errMsg(e) }));
+        setEx((p) => ({ id, data: p?.id === id ? p.data : null, error: errText(e) }));
         t = setTimeout(tick, 4000);
       }
     };

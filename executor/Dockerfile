@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     touch src/main.rs src/lib.rs && cargo build --release --locked
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
 COPY contracts/deployments /deployments
 COPY --from=build /src/target/release/executor /usr/local/bin/executor
 ENV EXECUTOR_ADDR=0.0.0.0:8083 DEPLOYMENTS_DIR=/deployments NEAR_NETWORK=testnet
