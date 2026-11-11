@@ -48,6 +48,14 @@ func TestLoadDeployments(t *testing.T) {
 	}
 }
 
+func TestRepoDeployments(t *testing.T) {
+	for _, n := range []string{"testnet", "mainnet"} {
+		if _, err := LoadDeployments("../../../contracts/deployments", n); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestNetwork(t *testing.T) {
 	t.Setenv("NEAR_NETWORK", "")
 	if Network() != "testnet" {

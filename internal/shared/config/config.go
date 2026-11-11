@@ -87,8 +87,9 @@ func LoadDeployments(dir, network string) (*Deployments, error) {
 	if err := json.Unmarshal(b, &d); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if d.Treasury == "" || d.Tokens["usdc"] == "" || d.Tokens["wnear"] == "" {
-		return nil, fmt.Errorf("%s: treasury, tokens.usdc or tokens.wnear missing", path)
+	// treasury not required: contracts get it at init, services never send to it
+	if d.Tokens["usdc"] == "" || d.Tokens["wnear"] == "" {
+		return nil, fmt.Errorf("%s: tokens.usdc or tokens.wnear missing", path)
 	}
 	return &d, nil
 }
