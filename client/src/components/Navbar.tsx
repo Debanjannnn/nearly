@@ -87,7 +87,7 @@ export function Navbar() {
               className="inline-flex h-9 items-center gap-2 rounded-full bg-primary px-3.5 text-sm font-semibold whitespace-nowrap text-primary-foreground transition-[background-color,scale] duration-150 hover:bg-primary/90 active:scale-[0.96] disabled:opacity-70"
             >
               {pending && <span className="size-3 animate-spin rounded-full border-2 border-current/30 border-t-current" />}
-              {accountId ? "Sign in" : "Connect wallet"}
+              {!accountId ? "Connect wallet" : !authenticated ? "Sign in" : "Create account"}
             </button>
           )}
         </div>
