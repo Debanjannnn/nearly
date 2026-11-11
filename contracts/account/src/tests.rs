@@ -133,7 +133,7 @@ fn failed_transfer_is_refunded() {
     set("alice.testnet", other_pk(), 1);
     c.withdraw(acc(USDC), U128(500));
     settle_with(PromiseResult::Failed);
-    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, None, false);
+    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, false);
     assert_eq!(bal(&c, USDC), 2_000);
 }
 
@@ -143,7 +143,7 @@ fn long_success_result_is_not_refunded() {
     set("alice.testnet", other_pk(), 1);
     c.withdraw(acc(USDC), U128(500));
     settle_with(PromiseResult::Successful(vec![b'x'; 100]));
-    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, None, false);
+    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, false);
     assert_eq!(bal(&c, USDC), 1_500);
 }
 
@@ -334,13 +334,7 @@ fn supply_books_position_on_partial_use() {
     assert_eq!(bal(&c, USDC), 1_000);
     settle_with(PromiseResult::Successful(b"\"600\"".to_vec()));
     let pos = Slot::Position(lending_key(&acc(USDC)));
-    c.on_settle(
-        Some(Slot::Balance(acc(USDC))),
-        U128(1_000),
-        Some(pos),
-        None,
-        true,
-    );
+    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(1_000), Some(pos), true);
     assert_eq!(bal(&c, USDC), 1_400);
     assert_eq!(
         c.positions.get(&lending_key(&acc(USDC))).copied(),
@@ -358,8 +352,105 @@ fn stake_failure_books_nothing() {
         None,
         U128(100),
         Some(Slot::Position(STAKING_KEY.into())),
-        None,
         false,
     );
     assert!(c.positions.get(STAKING_KEY).is_none());
+}
+
+fn swap_step(min_out: u128) -> Step {
+    Step::Swap {
+        pool_id: 1,
+        token_in: acc(USDC),
+        token_out: acc(WNEAR),
+        amount_in: U128(500),
+        min_out: U128(min_out),
+    }
+}
+
+#[test]
+fn swap_books_actual_output() {
+    let mut c = setup();
+    as_executor();
+    c.execute_step(swap_step(900));
+    assert_eq!(bal(&c, USDC), 1_500);
+    settle_with(PromiseResult::Successful(b"\"500\"".to_vec()));
+    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, true);
+    // dex sent 1_000 wNEAR, more than min_out
+    settle_with(PromiseResult::Successful(b"\"1000\"".to_vec()));
+    assert_eq!(c.on_observe(acc(WNEAR)), U128(1_000));
+    assert_eq!(bal(&c, WNEAR), 1_000);
+    assert_eq!(bal(&c, USDC), 1_500);
+}
+
+#[test]
+fn failed_swap_refunds_and_books_nothing() {
+    let mut c = setup();
+    as_executor();
+    c.execute_step(swap_step(10_000));
+    settle_with(PromiseResult::Successful(b"\"0\"".to_vec()));
+    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, true);
+    settle_with(PromiseResult::Successful(b"\"0\"".to_vec()));
+    assert_eq!(c.on_observe(acc(WNEAR)), U128(0));
+    assert_eq!(bal(&c, USDC), 2_000);
+    assert_eq!(bal(&c, WNEAR), 0);
+}
+
+#[test]
+fn failed_balance_read_books_nothing() {
+    let mut c = setup();
+    settle_with(PromiseResult::Failed);
+    assert_eq!(c.on_observe(acc(USDC)), U128(0));
+    assert_eq!(bal(&c, USDC), 2_000);
+}
+
+#[test]
+fn withdraw_lend_moves_position_to_balance() {
+    let mut c = setup();
+    let key = lending_key(&acc(USDC));
+    c.positions.insert(key.clone(), 800);
+    as_executor();
+    c.execute_step(Step::WithdrawLend {
+        token: acc(USDC),
+        amount: U128(300),
+    });
+    assert_eq!(c.positions.get(&key).copied(), Some(500));
+    settle_with(PromiseResult::Successful(vec![]));
+    c.on_settle(Some(Slot::Position(key.clone())), U128(300), None, false);
+    // 2_000 tracked + 300 arrived
+    settle_with(PromiseResult::Successful(b"\"2300\"".to_vec()));
+    c.on_observe(acc(USDC));
+    assert_eq!(bal(&c, USDC), 2_300);
+    assert_eq!(c.positions.get(&key).copied(), Some(500));
+}
+
+#[test]
+fn failed_withdraw_lend_restores_position() {
+    let mut c = setup();
+    let key = lending_key(&acc(USDC));
+    c.positions.insert(key.clone(), 800);
+    as_executor();
+    c.execute_step(Step::WithdrawLend {
+        token: acc(USDC),
+        amount: U128(300),
+    });
+    settle_with(PromiseResult::Failed);
+    c.on_settle(Some(Slot::Position(key.clone())), U128(300), None, false);
+    assert_eq!(c.positions.get(&key).copied(), Some(800));
+}
+
+#[test]
+fn unstake_failure_restores_position() {
+    let mut c = setup();
+    c.positions.insert(STAKING_KEY.into(), 1_000);
+    as_executor();
+    c.execute_step(Step::Unstake { amount: U128(400) });
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(600));
+    settle_with(PromiseResult::Failed);
+    c.on_settle(
+        Some(Slot::Position(STAKING_KEY.into())),
+        U128(400),
+        None,
+        false,
+    );
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(1_000));
 }

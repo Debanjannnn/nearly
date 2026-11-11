@@ -33,21 +33,21 @@ impl Contract {
                     venues::supply(v.lending, token, amount.0),
                     Some(bal),
                     amount.0,
-                    Some((pos, None)),
+                    Some(pos),
                     true,
                 )
             }
             Step::WithdrawLend { token, amount } => {
                 let pos = Slot::Position(lending_key(&token));
                 self.debit(&pos, amount.0);
-                let bal = Slot::Balance(token.clone());
-                self.settle(
-                    venues::withdraw_lend(v.lending, token, amount.0),
+                let p = self.settle(
+                    venues::withdraw_lend(v.lending, token.clone(), amount.0),
                     Some(pos),
                     amount.0,
-                    Some((bal, None)),
+                    None,
                     false,
-                )
+                );
+                Self::observe(p, token)
             }
             Step::Swap {
                 pool_id,
@@ -58,10 +58,16 @@ impl Contract {
             } => {
                 let bal_in = Slot::Balance(token_in.clone());
                 self.debit(&bal_in, amount_in.0);
-                // shortcut: books min_out, not the real output; #4 reads the actual amount
-                let out = Some((Slot::Balance(token_out.clone()), Some(min_out)));
-                let p = venues::swap(v.dex, pool_id, token_in, token_out, amount_in.0, min_out.0);
-                self.settle(p, Some(bal_in), amount_in.0, out, true)
+                let p = venues::swap(
+                    v.dex,
+                    pool_id,
+                    token_in,
+                    token_out.clone(),
+                    amount_in.0,
+                    min_out.0,
+                );
+                let p = self.settle(p, Some(bal_in), amount_in.0, None, true);
+                Self::observe(p, token_out)
             }
             Step::Stake { amount } => {
                 require!(amount.0 <= free_near(), "insufficient NEAR");
@@ -70,7 +76,7 @@ impl Contract {
                     venues::stake(v.staking, amount.0),
                     None,
                     amount.0,
-                    Some((pos, None)),
+                    Some(pos),
                     false,
                 )
             }
@@ -97,6 +103,11 @@ impl Contract {
                 self.send(token, owner, amount.0)
             }
         }
+    }
+
+    /// Pulls unstaked NEAR back once the staking delay passed. Funds only come here, so anyone may call.
+    pub fn claim_unstaked(&self) -> Promise {
+        venues::withdraw_unstaked(self.venues.staking.clone())
     }
 }
 

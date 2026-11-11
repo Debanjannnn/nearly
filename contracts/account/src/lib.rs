@@ -81,6 +81,7 @@ impl Contract {
         for (token, cap) in tokens {
             c.add_token(token, cap.0);
         }
+        c.register_venues(None);
         c
     }
 

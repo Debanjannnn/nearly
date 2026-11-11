@@ -10,7 +10,19 @@ impl Contract {
     /// Whitelists `token`; registers this account on it the first time.
     pub(crate) fn add_token(&mut self, token: AccountId, cap: u128) {
         if self.caps.insert(token.clone(), cap).is_none() {
-            venues::register(token, env::current_account_id()).detach();
+            venues::register(token, env::current_account_id(), venues::FT_STORAGE).detach();
+        }
+    }
+
+    /// Lending needs storage before the first supply; LiNEAR is also an FT we hold.
+    pub(crate) fn register_venues(&self, old: Option<&Venues>) {
+        let me = env::current_account_id();
+        let v = &self.venues;
+        if old.is_none_or(|o| o.lending != v.lending) {
+            venues::register(v.lending.clone(), me.clone(), venues::LENDING_STORAGE).detach();
+        }
+        if old.is_none_or(|o| o.staking != v.staking) {
+            venues::register(v.staking.clone(), me, venues::FT_STORAGE).detach();
         }
     }
 
@@ -40,7 +52,8 @@ impl Contract {
     #[payable]
     pub fn set_venues(&mut self, venues: Venues) {
         self.assert_owner_call();
-        self.venues = venues;
+        let old = std::mem::replace(&mut self.venues, venues);
+        self.register_venues(Some(&old));
     }
 
     /// `cap = None` removes the token from the whitelist.

@@ -54,15 +54,21 @@ impl Contract {
         p: Promise,
         debit: Option<Slot>,
         amount: u128,
-        credit: Option<(Slot, Option<U128>)>,
+        credit: Option<Slot>,
         transfer_call: bool,
     ) -> Promise {
-        let (credit, credit_amount) = credit.map_or((None, None), |(s, a)| (Some(s), a));
         p.then(
             Self::ext(env::current_account_id())
                 .with_static_gas(GAS_SETTLE)
-                .on_settle(debit, U128(amount), credit, credit_amount, transfer_call),
+                .on_settle(debit, U128(amount), credit, transfer_call),
         )
+    }
+
+    /// Chains a balance read of `token`; whatever arrived beyond the ledger is credited.
+    pub(crate) fn observe(p: Promise, token: AccountId) -> Promise {
+        let me = env::current_account_id();
+        p.then(crate::venues::ft_balance_of(token.clone(), me.clone()))
+            .then(Self::ext(me).with_static_gas(GAS_SETTLE).on_observe(token))
     }
 
     /// Debits the balance and sends an FT; refunded if the transfer fails.
@@ -107,7 +113,6 @@ impl Contract {
         debit: Option<Slot>,
         amount: U128,
         credit: Option<Slot>,
-        credit_amount: Option<U128>,
         transfer_call: bool,
     ) -> U128 {
         // only a real failure refunds; a long success result still means funds left
@@ -126,8 +131,26 @@ impl Contract {
             }
         }
         if let (Some(c), true) = (credit, used > 0) {
-            self.credit(&c, credit_amount.map_or(used, |a| a.0));
+            self.credit(&c, used);
         }
         U128(used)
+    }
+
+    /// Credits on-chain balance minus ledger. Steps run one at a time, so the gap is this step's output.
+    /// shortcut: a late venue transfer is picked up by the next observe of that token.
+    #[private]
+    pub fn on_observe(&mut self, token: AccountId) -> U128 {
+        let Ok(b) = env::promise_result_checked(0, 64) else {
+            return U128(0);
+        };
+        let Ok(real) = serde_json::from_slice::<U128>(&b) else {
+            return U128(0);
+        };
+        let slot = Slot::Balance(token);
+        let got = real.0.saturating_sub(self.slot(&slot));
+        if got > 0 {
+            self.credit(&slot, got);
+        }
+        U128(got)
     }
 }
