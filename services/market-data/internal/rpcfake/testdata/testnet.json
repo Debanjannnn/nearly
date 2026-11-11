@@ -1,0 +1,49 @@
+{
+ "block@0": {
+  "height": 277248091,
+  "timestamp": 1794419284146579693
+ },
+ "block@276240091": {
+  "height": 276240091,
+  "timestamp": 1793821658922656868
+ },
+ "burrow.services.ref-labs.testnet get_asset {\"token_id\":\"usdcc.ft.ref-labs.testnet\"}@0": {
+  "borrow_apr": "0.0112778433704322217425694",
+  "supply_apr": "0.001306085658989344732759423",
+  "token_id": "usdcc.ft.ref-labs.testnet"
+ },
+ "burrow.services.ref-labs.testnet get_asset {\"token_id\":\"wrap.testnet\"}@0": {
+  "borrow_apr": "0.000098246917097640346840329",
+  "supply_apr": "0.000000049519871378073392205",
+  "token_id": "wrap.testnet"
+ },
+ "linear-protocol.testnet ft_metadata {}@0": {
+  "decimals": 24,
+  "symbol": "LINEAR"
+ },
+ "linear-protocol.testnet ft_price {}@0": "2304947786538384617781948",
+ "linear-protocol.testnet ft_price {}@276240091": "2284175768908950653602947",
+ "linear-protocol.testnet ft_price {}@277248091": "2304947786538384617781948",
+ "ref-finance-101.testnet get_pool {\"pool_id\":1900}@0": {
+  "amounts": [
+   "75199883753165716516172173",
+   "1129094461"
+  ],
+  "amp": 0,
+  "pool_kind": "SIMPLE_POOL",
+  "shares_total_supply": "2885081406755482031373044",
+  "token_account_ids": [
+   "wrap.testnet",
+   "usdcc.ft.ref-labs.testnet"
+  ],
+  "total_fee": 30
+ },
+ "usdcc.ft.ref-labs.testnet ft_metadata {}@0": {
+  "decimals": 6,
+  "symbol": "b-USDC"
+ },
+ "wrap.testnet ft_metadata {}@0": {
+  "decimals": 24,
+  "symbol": "wNEAR"
+ }
+}
