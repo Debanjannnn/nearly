@@ -9,6 +9,7 @@ import { accountUrl, NETWORK } from "@/lib/config";
 import { useCopy } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import { BasketSearch } from "./BasketSearch";
 import { Row, Spinner, useDismissable } from "./ui";
 
 const NAV = [
@@ -58,6 +59,7 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center justify-end gap-2 sm:gap-6">
+          <BasketSearch />
           <nav aria-label="Main navigation" className="hidden items-center gap-6 md:flex">
             {links("inline-flex h-10 items-center px-2 text-[15px]")}
           </nav>
@@ -97,7 +99,7 @@ export function Navbar() {
 }
 
 function WalletMenu() {
-  const { accountId, account, logout, error } = useSession();
+  const { accountId, account, logout, error, keyStatus } = useSession();
   const { open, setOpen, ref } = useDismissable();
 
   return (
@@ -117,6 +119,7 @@ function WalletMenu() {
             {accountId && <AccountRow label="Wallet" id={accountId} />}
             {account && <AccountRow label="Account" id={account} />}
             <Row label="Network">NEAR {NETWORK}</Row>
+            {keyStatus && <Row label="Automation key">{keyStatus}</Row>}
           </dl>
           {error && <p className="text-xs break-words text-destructive">{error}</p>}
           <button
