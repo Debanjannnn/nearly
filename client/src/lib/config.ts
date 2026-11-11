@@ -30,4 +30,4 @@ export const TOTAL_BPS = 10_000;
 
 const EXPLORER = NETWORK === "mainnet" ? "https://nearblocks.io" : "https://testnet.nearblocks.io";
 export const txUrl = (hash: string) => `${EXPLORER}/txns/${hash}`;
-export const accountUrl = (id: string) => `${EXPLORER}/address/${id}`;
+export const addressUrl = (id: string) => `${EXPLORER}/address/${id}`;
