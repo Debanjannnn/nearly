@@ -66,6 +66,7 @@ type Deployments struct {
 	Factory  string            `json:"factory"`
 	Treasury string            `json:"treasury"`
 	Tokens   map[string]string `json:"tokens"`
+	LSTPool  *uint64           `json:"lst_pool"` // Rhea LiNEAR/wNEAR pool; unset = no instant LST exit
 	Venues   struct {
 		Lending string `json:"lending"`
 		Dex     string `json:"dex"`

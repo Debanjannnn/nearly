@@ -29,7 +29,15 @@ pub fn check_account(dep: &Deployments, account: &str) -> Result<(), String> {
 
 /// Steps moving wNEAR or NEAR need a USD price for the cap.
 pub fn needs_price(dep: &Deployments, s: &Step) -> bool {
-    s.spend().0.is_none_or(|t| t == dep.tokens.wnear)
+    spend(dep, s).0.is_none_or(|t| t == dep.tokens.wnear)
+}
+
+/// Like `Step::spend`, but an LST exit swap spends the staking position: NEAR value, `None` token.
+fn spend<'a>(dep: &Deployments, s: &'a Step) -> (Option<&'a str>, u128) {
+    match s.spend() {
+        (Some(t), a) if matches!(s, Step::Swap { .. }) && t == dep.venues.staking => (None, a),
+        x => x,
+    }
 }
 
 /// `near_usdc`: USDC atoms per 1 NEAR, required when any step `needs_price`.
@@ -70,7 +78,7 @@ fn check_step(
             return Err("swap without min_out".into());
         }
     }
-    let (token, amount) = s.spend();
+    let (token, amount) = spend(dep, s);
     if amount == 0 {
         return Err("zero amount".into());
     }
@@ -169,6 +177,21 @@ mod tests {
         assert!(ok(swap("wrap.testnet", 0)).is_err());
         assert!(ok(swap(USDC, 1)).is_err());
         assert!(ok(swap("evil.testnet", 1)).is_err());
+        let exit = |amount| Step::Swap {
+            pool_id: 3515,
+            token_in: "linear-protocol.testnet".into(),
+            token_out: "wrap.testnet".into(),
+            amount_in: amount,
+            min_out: 1,
+        };
+        assert!(ok(exit(333 * NEAR_ONE)).is_ok());
+        assert!(ok(exit(334 * NEAR_ONE)).is_err());
+        assert!(needs_price(&d, &exit(1)));
+        assert!(ok(Step::ToOwner {
+            token: "linear-protocol.testnet".into(),
+            amount: 1
+        })
+        .is_err());
         assert!(check(&d, &[], 1000, P).is_err());
     }
 }

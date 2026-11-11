@@ -13,6 +13,12 @@ use crate::{Contract, ContractExt};
 const NEAR_RESERVE: NearToken = NearToken::from_millinear(500);
 /// Withdraw leg + settle + observe, issued from `on_lend_asset`.
 const GAS_LEND_CB: Gas = Gas::from_tgas(160);
+/// Swap leg + settle + observe, issued from `on_lst_exit`.
+const GAS_LST_CB: Gas = Gas::from_tgas(190);
+const GAS_LST_SETTLE: Gas = Gas::from_tgas(10);
+/// ft_price scale; price is cut to 10 decimals so amount * 1e10 fits u128 up to ~34k NEAR.
+const PRICE_CUT: u128 = 100_000_000_000_000;
+const SHARE_ONE: u128 = 10_000_000_000;
 pub const STAKING_KEY: &str = "staking";
 
 pub fn lending_key(token: &AccountId) -> String {
@@ -48,6 +54,25 @@ impl Contract {
                         .on_lend_asset(token, amount),
                 )
             }
+            // LST exit: instant swap of LiNEAR shares instead of the ~4 epoch unstake
+            Step::Swap {
+                pool_id,
+                token_in,
+                token_out,
+                amount_in,
+                min_out,
+            } if token_in == v.staking => {
+                let pos = Slot::Position(STAKING_KEY.into());
+                self.debit(&pos, amount_in.0);
+                let all = self.slot(&pos) == 0;
+                venues::lst_price(v.staking.clone())
+                    .and(venues::ft_balance_of(v.staking, env::current_account_id()))
+                    .then(
+                        Self::ext(env::current_account_id())
+                            .with_static_gas(GAS_LST_CB)
+                            .on_lst_exit(pool_id, token_out, amount_in, min_out, all),
+                    )
+            }
             Step::Swap {
                 pool_id,
                 token_in,
@@ -82,13 +107,11 @@ impl Contract {
             Step::Unstake { amount } => {
                 let pos = Slot::Position(STAKING_KEY.into());
                 self.debit(&pos, amount.0);
-                self.settle(
-                    venues::unstake(v.staking, amount.0),
-                    Some(pos),
-                    amount.0,
-                    None,
-                    false,
-                )
+                let p = match self.slot(&pos) {
+                    0 => venues::unstake_all(v.staking),
+                    _ => venues::unstake(v.staking, amount.0),
+                };
+                self.settle(p, Some(pos), amount.0, None, false)
             }
             Step::Fee { token, amount } => self.send(token, self.treasury.clone(), amount.0),
             Step::ToOwner { token, amount } => {
@@ -121,6 +144,65 @@ impl Contract {
         let p = venues::withdraw_lend(self.venues.lending.clone(), token.clone(), inner);
         let p = self.settle(p, Some(pos), amount.0, None, false);
         PromiseOrValue::Promise(Self::observe(p, token))
+    }
+
+    /// `amount` is NEAR value off the staking position. Full exit sells every share (rewards + dust),
+    /// partial sells `amount` worth at the current price. Unreadable price/balance = position refunded.
+    #[private]
+    pub fn on_lst_exit(
+        &mut self,
+        pool_id: u64,
+        token_out: AccountId,
+        amount: U128,
+        min_out: U128,
+        all: bool,
+    ) -> PromiseOrValue<U128> {
+        let read = |i| {
+            env::promise_result_checked(i, 64)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<U128>(&b).ok())
+                .map(|v| v.0)
+        };
+        let shares = match (read(0).map(|p| p / PRICE_CUT), read(1)) {
+            (_, Some(bal)) if all => Some(bal),
+            (Some(p), Some(bal)) if p > 0 => {
+                amount.0.checked_mul(SHARE_ONE).map(|v| (v / p).min(bal))
+            }
+            _ => None,
+        };
+        let pos = Slot::Position(STAKING_KEY.into());
+        let Some(shares) = shares.filter(|s| *s > 0) else {
+            self.credit(&pos, amount.0);
+            return PromiseOrValue::Value(U128(0));
+        };
+        let v = self.venues.clone();
+        let p = venues::swap(
+            v.dex,
+            pool_id,
+            v.staking,
+            token_out.clone(),
+            shares,
+            min_out.0,
+        )
+        .then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_LST_SETTLE)
+                .on_lst_swap(amount),
+        );
+        PromiseOrValue::Promise(Self::observe(p, token_out))
+    }
+
+    /// Ref swaps all or nothing: no shares used = position refunded.
+    #[private]
+    pub fn on_lst_swap(&mut self, amount: U128) -> U128 {
+        let used = env::promise_result_checked(0, 64)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<U128>(&b).ok())
+            .map_or(0, |u| u.0);
+        if used == 0 {
+            self.credit(&Slot::Position(STAKING_KEY.into()), amount.0);
+        }
+        U128(used)
     }
 
     /// Pulls unstaked NEAR back once the staking delay passed. Funds only come here, so anyone may call.

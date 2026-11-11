@@ -1,0 +1,69 @@
+{
+  "op": "withdraw",
+  "basket": {
+    "legs": [
+      {
+        "token": "usdc",
+        "source": "lending",
+        "weight_bps": 4000
+      },
+      {
+        "token": "wnear",
+        "source": "lending",
+        "weight_bps": 3000,
+        "pool_id": 1900
+      },
+      {
+        "token": "wnear",
+        "source": "staking",
+        "weight_bps": 2000,
+        "pool_id": 1900
+      },
+      {
+        "token": "wnear",
+        "source": "hold",
+        "weight_bps": 1000,
+        "pool_id": 1900
+      }
+    ],
+    "drift_bps": 500
+  },
+  "held": [
+    "398400000",
+    "99601200000000000000000000",
+    "66400800000000000000000000",
+    "33200400000000000000000000"
+  ],
+  "bps": 10000,
+  "lst_pool": 3515,
+  "steps": [
+    {
+      "kind": "withdraw_lend",
+      "token": "usdcc.ft.ref-labs.testnet",
+      "amount": "398400000"
+    },
+    {
+      "kind": "withdraw_lend",
+      "token": "wrap.testnet",
+      "amount": "99601200000000000000000000"
+    },
+    {
+      "kind": "swap",
+      "pool_id": 3515,
+      "token_in": "linear-protocol.testnet",
+      "token_out": "wrap.testnet",
+      "amount_in": "66400800000000000000000000",
+      "min_out": "66068796000000000000000000"
+    },
+    {
+      "kind": "to_owner",
+      "token": "usdcc.ft.ref-labs.testnet",
+      "amount": "398400000"
+    },
+    {
+      "kind": "to_owner",
+      "token": "wrap.testnet",
+      "amount": "198870396000000000000000000"
+    }
+  ]
+}

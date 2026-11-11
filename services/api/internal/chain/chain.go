@@ -108,7 +108,10 @@ func (c *Chain) Live(ctx context.Context, account string, steps []planner.Step) 
 			if v, ok := lent[st.Token]; ok {
 				live.Lent[st.Token] = v
 			}
-		case planner.KindUnstake:
+		case planner.KindUnstake, planner.KindSwap:
+			if st.Kind == planner.KindSwap && st.TokenIn != c.Dep.Venues.Staking {
+				continue
+			}
 			if live.Staked, err = c.staked(ctx, account); err != nil {
 				return live, fmt.Errorf("staking: %w", err)
 			}

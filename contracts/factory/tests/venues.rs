@@ -14,6 +14,7 @@ const NEAR: u128 = 10u128.pow(24);
 
 struct Env {
     worker: Worker<Sandbox>,
+    alice: Account,
     usdc: Contract,
     wnear: Contract,
     lending: Contract,
@@ -41,9 +42,15 @@ async fn setup() -> anyhow::Result<Env> {
     let dex = deploy(&root, "dex", DEX_WASM).await?;
     let staking = deploy(&root, "staking", STAKING_WASM).await?;
     let factory = deploy(&root, "factory", FACTORY_WASM).await?;
-    for t in [&usdc, &wnear] {
+    for t in [&usdc, &wnear, &staking] {
         t.call("new").transact().await?.into_result()?;
     }
+    staking
+        .call("storage_deposit")
+        .args_json(json!({"account_id": dex.id()}))
+        .transact()
+        .await?
+        .into_result()?;
     // 1 USDC buys 2 wNEAR
     dex.call("new")
         .args_json(json!({"num": "2", "den": "1"}))
@@ -116,6 +123,7 @@ async fn setup() -> anyhow::Result<Env> {
     let exec = Account::from_secret_key(id.clone(), exec_sk, &worker);
     Ok(Env {
         worker,
+        alice,
         usdc,
         wnear,
         lending,
@@ -248,5 +256,66 @@ async fn stake_unstake_matches_venue() -> anyhow::Result<()> {
         .into_result()?;
     let after = e.worker.view_account(&e.id).await?.balance;
     assert!(after > before, "unstaked NEAR not returned");
+    Ok(())
+}
+
+#[tokio::test]
+async fn lst_exit_swaps_shares_to_wnear() -> anyhow::Result<()> {
+    let e = setup().await?;
+    let (lst, wnear) = (e.staking.id().to_string(), e.wnear.id().to_string());
+    let exit = |amount: u128| {
+        json!({"kind": "swap", "pool_id": 3515, "token_in": lst, "token_out": wnear,
+               "amount_in": amount.to_string(), "min_out": "1"})
+    };
+    e.step(json!({"kind": "stake", "amount": "1000"})).await?;
+    assert_eq!(e.ft_balance(&e.staking).await?, 1000);
+
+    // partial: 400 NEAR value at price 1 = 400 shares, dex pays 2x
+    e.step(exit(400)).await?;
+    assert_eq!(e.ledger("get_positions", "staking").await?, 600);
+    assert_eq!(e.ledger("get_balances", &wnear).await?, 800);
+
+    // full exit sells every share left, then to_owner can pay out at once
+    e.step(exit(600)).await?;
+    assert_eq!(e.ledger("get_positions", "staking").await?, 0);
+    assert_eq!(e.ft_balance(&e.staking).await?, 0);
+    assert_eq!(e.ledger("get_balances", &wnear).await?, 2000);
+    Ok(())
+}
+
+#[tokio::test]
+async fn owner_withdraw_fails_loudly_when_transfer_fails() -> anyhow::Result<()> {
+    let e = setup().await?;
+    let usdc = e.usdc.id().to_string();
+    let wnear = e.wnear.id().to_string();
+    e.step(
+        json!({"kind": "swap", "pool_id": 1, "token_in": usdc, "token_out": wnear,
+                  "amount_in": "100", "min_out": "1"}),
+    )
+    .await?;
+    assert_eq!(e.ledger("get_balances", &wnear).await?, 200);
+    let withdraw = |token: &str, amount: &str| {
+        e.alice
+            .call(&e.id, "withdraw")
+            .args_json(json!({"token": token, "amount": amount}))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(TX_GAS)
+            .transact()
+    };
+
+    // alice is not registered on wNEAR: ft_transfer fails, tx fails, ledger refunded
+    let r = withdraw(&wnear, "200").await?;
+    assert!(r.is_failure(), "withdraw reported success");
+    let got: String = e
+        .worker
+        .view(&e.id, "get_balance")
+        .args_json(json!({"token": wnear}))
+        .await?
+        .json()?;
+    assert_eq!(got, "200");
+
+    let r = withdraw(&usdc, "100").await?;
+    assert_eq!(r.into_result()?.json::<String>()?, "100");
+    assert_eq!(e.ledger("get_balances", &usdc).await?, 4800);
     Ok(())
 }

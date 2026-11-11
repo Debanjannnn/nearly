@@ -45,6 +45,8 @@ type Planner struct {
 	Tokens      map[string]string // symbol -> contract ID, from deployments tokens
 	Q           Quoter
 	SlippageBps int
+	LST         string  // LiNEAR token = deployments venues.staking
+	LSTPool     *uint64 // Rhea LiNEAR/wNEAR pool; nil = exit by delayed unstake
 }
 
 func (p *Planner) id(sym string) string { return p.Tokens[sym] }
@@ -106,13 +108,22 @@ func (p *Planner) put(l Leg, amount *big.Int) []Step {
 	return []Step{tokenStep(KindSupply, p.id(l.Token), amount)}
 }
 
-// take pulls amount of leg's token out of its source into the account.
-func (p *Planner) take(l Leg, amount *big.Int) []Step {
+// take pulls amount of leg's token out of its source; got = what lands in the account now.
+// Staking swaps LiNEAR to wNEAR; without a pool it unstakes and nothing lands for ~4 epochs.
+func (p *Planner) take(l Leg, amount *big.Int) (steps []Step, got *big.Int) {
 	switch {
 	case amount.Sign() == 0 || l.Source == SourceHold:
-		return nil
+		return nil, amount
+	case l.Source == SourceStaking && p.LSTPool != nil:
+		// amount is NEAR value and the pool is rated, so value minus slippage is the floor
+		m := p.lstMinOut(amount)
+		return []Step{swap(*p.LSTPool, p.LST, p.id("wnear"), amount, m)}, m
 	case l.Source == SourceStaking:
-		return []Step{tokenStep(KindUnstake, "", amount)}
+		return []Step{tokenStep(KindUnstake, "", amount)}, new(big.Int)
 	}
-	return []Step{tokenStep(KindWithdrawLend, p.id(l.Token), amount)}
+	return []Step{tokenStep(KindWithdrawLend, p.id(l.Token), amount)}, amount
+}
+
+func (p *Planner) lstMinOut(amount *big.Int) *big.Int {
+	return mulDiv(amount, int64(10_000-p.SlippageBps), 10_000)
 }

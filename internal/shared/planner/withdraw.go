@@ -3,7 +3,7 @@ package planner
 import "math/big"
 
 // Withdraw unwinds part (bps, 10000 = all) of every leg and sends the tokens to the owner as they
-// are (no swap back). held is per leg, token atoms. Plan.Held = what remains. No fee.
+// are (no swap back; staking exits as wNEAR). held is per leg, token atoms. Plan.Held = what remains.
 func (p *Planner) Withdraw(b Basket, held []string, part int) (Plan, error) {
 	if err := p.Validate(b); err != nil {
 		return Plan{}, err
@@ -19,12 +19,13 @@ func (p *Planner) Withdraw(b Basket, held []string, part int) (Plan, error) {
 	out, order := map[string]*big.Int{}, []string{}
 	for i, l := range b.Legs {
 		take := mulDiv(h[i], int64(part), 10_000)
-		steps = append(steps, p.take(l, take)...)
+		st, got := p.take(l, take)
+		steps = append(steps, st...)
 		h[i].Sub(h[i], take)
 		if out[l.Token] == nil {
 			out[l.Token], order = new(big.Int), append(order, l.Token)
 		}
-		out[l.Token].Add(out[l.Token], take)
+		out[l.Token].Add(out[l.Token], got)
 	}
 	for _, sym := range order {
 		if out[sym].Sign() > 0 {
@@ -78,17 +79,22 @@ func (p *Planner) ResumeWithdraw(steps []Step, done int, live Live) ([]Step, err
 	}
 	var out []Step
 	for _, st := range steps[done:] {
-		planned, err := amt(st.Amount)
+		lstExit := st.Kind == KindSwap && p.LST != "" && st.TokenIn == p.LST
+		raw := st.Amount
+		if lstExit {
+			raw = st.AmountIn
+		}
+		planned, err := amt(raw)
 		if err != nil {
 			return nil, err
 		}
 		var have *big.Int
-		switch st.Kind {
-		case KindWithdrawLend:
-			have = or0(live.Lent[st.Token])
-		case KindUnstake:
+		switch {
+		case lstExit, st.Kind == KindUnstake:
 			have = staked
-		case KindToOwner:
+		case st.Kind == KindWithdrawLend:
+			have = or0(live.Lent[st.Token])
+		case st.Kind == KindToOwner:
 			have = wallet[st.Token]
 		default:
 			return nil, fail("bad_request", "%s is not a withdraw step", st.Kind)
@@ -102,16 +108,21 @@ func (p *Planner) ResumeWithdraw(steps []Step, done int, live Live) ([]Step, err
 		if v.Sign() == 0 {
 			continue
 		}
-		switch st.Kind {
-		case KindWithdrawLend:
-			credit(st.Token, v)
-		case KindUnstake:
+		switch {
+		case lstExit:
 			staked.Sub(staked, v)
-			credit(p.id("wnear"), v)
-		case KindToOwner:
+			st.AmountIn, st.MinOut = v.String(), p.lstMinOut(v).String()
+			credit(st.TokenOut, p.lstMinOut(v))
+		case st.Kind == KindUnstake:
+			staked.Sub(staked, v) // NEAR returns after the unstake delay, not to the wallet
+		case st.Kind == KindWithdrawLend:
+			credit(st.Token, v)
+		case st.Kind == KindToOwner:
 			wallet[st.Token].Sub(wallet[st.Token], v)
 		}
-		st.Amount = v.String()
+		if !lstExit {
+			st.Amount = v.String()
+		}
 		out = append(out, st)
 	}
 	return out, nil

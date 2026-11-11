@@ -55,13 +55,13 @@
       "pool_id": 1900,
       "token_in": "wrap.testnet",
       "token_out": "usdcc.ft.ref-labs.testnet",
-      "amount_in": "16000000000000000000000000",
-      "min_out": "47760000"
+      "amount_in": "14000000000000000000000000",
+      "min_out": "41790000"
     },
     {
       "kind": "supply",
       "token": "usdcc.ft.ref-labs.testnet",
-      "amount": "47760000"
+      "amount": "41790000"
     }
   ]
 }
