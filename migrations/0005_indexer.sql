@@ -1,4 +1,4 @@
--- 0004 indexer: NEP-297 "nearly" events from user sub-accounts + last read of each account's ledger.
+-- 0005 indexer: NEP-297 "nearly" events from user sub-accounts + last read of each account's ledger.
 
 create table chain_events (
   receipt_id   text not null,

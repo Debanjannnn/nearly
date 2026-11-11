@@ -1,4 +1,4 @@
--- 0003 daily history for backtests. apy is a fraction (0.05 = 5%).
+-- 0004 daily history for backtests. apy is a fraction (0.05 = 5%).
 
 create table series_rate (
   source text not null check (source in ('lending', 'staking')),
