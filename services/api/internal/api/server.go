@@ -14,6 +14,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/config"
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
+	"github.com/Debanjannnn/nearly/internal/shared/intents"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 )
@@ -42,6 +43,7 @@ type Server struct {
 	Plan        *planner.Planner
 	Dep         *config.Deployments
 	ExecutorKey string
+	Intents     *intents.Client
 	bg          sync.WaitGroup // background executor runs; tests Wait on it
 }
 
@@ -49,6 +51,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth", s.login)
 	mux.HandleFunc("GET /api/v1/baskets", s.publicBaskets)
 	mux.Handle("GET /api/v1/baskets/{id}", s.optionalMe(s.basket))
+	mux.HandleFunc("GET /api/v1/intents/tokens", s.intentTokens)
 
 	mux.Handle("GET /api/v1/me", s.me(s.user))
 	mux.Handle("POST /api/v1/me/account", s.me(s.createAccount))
@@ -67,6 +70,10 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/me/schedules/{id}", s.me(s.schedule))
 	mux.Handle("PATCH /api/v1/me/schedules/{id}", s.me(s.updateSchedule))
 	mux.Handle("DELETE /api/v1/me/schedules/{id}", s.me(s.deleteSchedule))
+	mux.Handle("POST /api/v1/me/intents/deposit-quote", s.me(s.depositQuote))
+	mux.Handle("POST /api/v1/me/intents/withdraw-quote", s.me(s.withdrawQuote))
+	mux.Handle("POST /api/v1/me/intents/submit", s.me(s.submitIntent))
+	mux.Handle("GET /api/v1/me/intents/status", s.me(s.intentStatus))
 }
 
 // Wait blocks until background executor runs finish.
@@ -95,6 +102,7 @@ var (
 	ErrNoFactory     = &Err{http.StatusServiceUnavailable, "factory_not_deployed"}
 	ErrInvalidSched  = &Err{http.StatusBadRequest, "invalid_schedule"}
 	ErrInvalidBasket = &Err{http.StatusBadRequest, "invalid_basket"}
+	ErrIntents       = &Err{http.StatusBadGateway, "intents_unavailable"}
 )
 
 type accountKey struct{}
@@ -136,7 +144,10 @@ func (s *Server) optionalMe(h http.HandlerFunc) http.Handler {
 func fail(w http.ResponseWriter, what string, err error) {
 	var ae *Err
 	var pe *planner.Error
+	var ie *intents.Error // only 1Click 400/404 reach here, see intentsErr
 	switch {
+	case errors.As(err, &ie):
+		httpx.JSON(w, ie.Status, map[string]string{"error": "intents_rejected", "detail": ie.Message})
 	case errors.As(err, &ae):
 		httpx.Error(w, ae.Status, ae.Code)
 	case errors.As(err, &pe):

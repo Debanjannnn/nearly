@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Debanjannnn/nearly/internal/shared/config"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
@@ -31,6 +32,29 @@ func TestFeeRow(t *testing.T) {
 	}
 	if s.feeRow(planner.Plan{Fee: "0"}, "c", "a") != nil {
 		t.Fatal("zero fee booked")
+	}
+}
+
+func TestIntentRequest(t *testing.T) {
+	ok := func(in intentQuoteIn) bool { _, ok := in.request("a", "b", "r", "f"); return ok }
+	if !ok(intentQuoteIn{Amount: "1"}) || ok(intentQuoteIn{Amount: "0"}) || ok(intentQuoteIn{Amount: "1", SwapType: "ANY_INPUT"}) ||
+		ok(intentQuoteIn{Amount: "1", SlippageBps: 5000}) {
+		t.Fatal("validation")
+	}
+	in := intentQuoteIn{Amount: "1"}
+	q, ok2 := in.request("a", "b", "r", "")
+	if ok2 || q.SwapType != "EXACT_INPUT" || q.SlippageTolerance != 100 || q.Deadline.IsZero() {
+		t.Fatalf("empty refund accepted or bad defaults: %+v", q)
+	}
+}
+
+func TestAbandonedIntent(t *testing.T) {
+	old, tx := time.Now().Add(-3*quoteTTL), "h"
+	if !abandoned(&Intent{Status: "PENDING_DEPOSIT", CreatedAt: old}) ||
+		abandoned(&Intent{Status: "PENDING_DEPOSIT", CreatedAt: time.Now()}) ||
+		abandoned(&Intent{Status: "PENDING_DEPOSIT", CreatedAt: old, DepositTx: &tx}) ||
+		abandoned(&Intent{Status: "PROCESSING", CreatedAt: old}) {
+		t.Fatal("abandoned")
 	}
 }
 

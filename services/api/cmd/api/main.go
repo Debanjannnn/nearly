@@ -14,6 +14,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/config"
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
+	"github.com/Debanjannnn/nearly/internal/shared/intents"
 	"github.com/Debanjannnn/nearly/internal/shared/near"
 	"github.com/Debanjannnn/nearly/internal/shared/pg"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
@@ -40,6 +41,7 @@ func run() error {
 	depDir := e.Opt("DEPLOYMENTS_DIR", "contracts/deployments")
 	ttl, slip := e.Duration("SESSION_TTL", 24*time.Hour), e.Int("SLIPPAGE_BPS", 50)
 	addr := ":" + e.Opt("PORT", "8080")
+	ic := intents.New(e.Opt("INTENTS_URL", intents.DefaultURL), e.Opt("INTENTS_JWT", ""))
 	origins := strings.Split(e.Opt("CORS_ORIGINS", "http://localhost:3000"), ",")
 	if err := e.Err(); err != nil {
 		return err
@@ -66,6 +68,7 @@ func run() error {
 		Plan:        &planner.Planner{Tokens: dep.Tokens, Q: ch, SlippageBps: slip},
 		Dep:         dep,
 		ExecutorKey: execKey,
+		Intents:     ic,
 	}
 	srv.Routes(mux)
 	slog.Info("listening", "addr", addr, "network", network)
