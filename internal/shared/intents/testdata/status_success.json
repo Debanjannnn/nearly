@@ -1,0 +1,74 @@
+{
+ "correlationId": "0b8c7a1e-4f7e-4c43-9d55-2a7f5e0b6f11",
+ "quoteResponse": {
+  "quote": {
+   "amountIn": "5000000",
+   "amountInFormatted": "5.0",
+   "amountInUsd": "4.998030000000",
+   "minAmountIn": "5000000",
+   "amountOut": "4999414",
+   "amountOutFormatted": "4.999414",
+   "amountOutUsd": "4.997444230884",
+   "minAmountOut": "4949419",
+   "timeEstimate": 35,
+   "refundFee": "2400",
+   "withdrawFee": "0",
+   "depositAddress": "0x76b4c56085ED136a8744D52bE956396624a730E8",
+   "deadline": "2026-11-11T19:14:06.000Z",
+   "timeWhenInactive": "2026-11-11T19:14:06.000Z"
+  },
+  "quoteRequest": {
+   "dry": false,
+   "depositMode": "SIMPLE",
+   "swapType": "EXACT_INPUT",
+   "slippageTolerance": 100,
+   "originAsset": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+   "depositType": "ORIGIN_CHAIN",
+   "destinationAsset": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+   "amount": "5000000",
+   "refundTo": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+   "refundType": "ORIGIN_CHAIN",
+   "recipient": "alice.near",
+   "recipientType": "DESTINATION_CHAIN",
+   "deadline": "2026-11-11T19:14:06.000Z",
+   "confidentiality": "public",
+   "quoteWaitingTimeMs": 0,
+   "insured": false,
+   "appFees": [
+    {
+     "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+     "fee": 1
+    }
+   ]
+  },
+  "signature": "ed25519:2TrPkYUTQk7evvfhLtUNkD5h8WHB7ppwwrcrias3ZR8aymAggRfod6cRtfvXLgVeMmS8x4CtyfQRuwJ7z8M9gdjX",
+  "timestamp": "2026-11-11T18:14:07.888Z",
+  "correlationId": "405e1ea3-76ac-4e15-98d4-047ec533da1d"
+ },
+ "status": "SUCCESS",
+ "updatedAt": "2026-11-11T18:20:00.000Z",
+ "swapDetails": {
+  "intentHashes": [
+   "4kq9"
+  ],
+  "nearTxHashes": [
+   "8Fh2"
+  ],
+  "amountIn": "5000000",
+  "amountInFormatted": "5.0",
+  "amountOut": "4999414",
+  "amountOutFormatted": "4.999414",
+  "originChainTxHashes": [
+   {
+    "hash": "0xabc",
+    "explorerUrl": "https://basescan.org/tx/0xabc"
+   }
+  ],
+  "destinationChainTxHashes": [
+   {
+    "hash": "9xYz",
+    "explorerUrl": "https://nearblocks.io/txns/9xYz"
+   }
+  ]
+ }
+}
