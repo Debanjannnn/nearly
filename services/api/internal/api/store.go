@@ -271,7 +271,11 @@ from positions p join baskets b on b.id=p.basket_id where p.id=$1`, posID).Scan(
 		switch pos.State {
 		case "open":
 		case "withdrawing":
-			if last, err = lastWithdraw(ctx, tx, posID); err != nil {
+			// no withdraw run yet = a dead deploy the sweep handed over for unwinding
+			if last, err = lastWithdraw(ctx, tx, posID); errors.Is(err, ErrNotFound) {
+				last, err = nil, nil
+			}
+			if err != nil {
 				return err
 			}
 		default:

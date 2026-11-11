@@ -261,7 +261,7 @@ func (s *Scheduler) run(sub, execID string, steps []planner.Step, after func(ctx
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
-		ectx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		ectx, cancel := context.WithTimeout(context.Background(), executor.MaxRun)
 		results, err := s.Exec.Execute(ectx, sub, execID, steps)
 		cancel()
 		// own ctx: an executor timeout must not leave the run stuck in 'running'
