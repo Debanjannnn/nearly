@@ -1,0 +1,62 @@
+{
+  "op": "resume",
+  "plan": [
+    {
+      "kind": "withdraw_lend",
+      "token": "usdc.fakes.testnet",
+      "amount": "398400000"
+    },
+    {
+      "kind": "withdraw_lend",
+      "token": "wrap.testnet",
+      "amount": "99601200000000000000000000"
+    },
+    {
+      "kind": "unstake",
+      "amount": "66400800000000000000000000"
+    },
+    {
+      "kind": "to_owner",
+      "token": "usdc.fakes.testnet",
+      "amount": "398400000"
+    },
+    {
+      "kind": "to_owner",
+      "token": "wrap.testnet",
+      "amount": "199202400000000000000000000"
+    }
+  ],
+  "done": 1,
+  "live": {
+    "lent": {
+      "usdc.fakes.testnet": "0",
+      "wrap.testnet": "40000000000000000000000000"
+    },
+    "staked": "66400800000000000000000000",
+    "wallet": {
+      "usdc.fakes.testnet": "398400000",
+      "wrap.testnet": "33200400000000000000000000"
+    }
+  },
+  "steps": [
+    {
+      "kind": "withdraw_lend",
+      "token": "wrap.testnet",
+      "amount": "40000000000000000000000000"
+    },
+    {
+      "kind": "unstake",
+      "amount": "66400800000000000000000000"
+    },
+    {
+      "kind": "to_owner",
+      "token": "usdc.fakes.testnet",
+      "amount": "398400000"
+    },
+    {
+      "kind": "to_owner",
+      "token": "wrap.testnet",
+      "amount": "139601200000000000000000000"
+    }
+  ]
+}
