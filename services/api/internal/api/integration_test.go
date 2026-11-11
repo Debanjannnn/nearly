@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 )
 
@@ -358,4 +360,48 @@ func TestSchedulesRevoke(t *testing.T) {
 	e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000"}, 409)
 	e.do("DELETE", "/api/v1/me/schedules/"+sid, tok, nil, 200)
 	e.do("DELETE", "/api/v1/me/schedules/"+sid, tok, nil, 404)
+}
+
+// A deploy killed mid-run is swept to withdrawing; the owner's withdraw unwinds what is live.
+func TestSweptDeployRecovers(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, basket, 201)["id"].(string)
+	b, err := e.srv.Store.Basket(ctx, bid, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := e.srv.Plan.Deploy(ctx, b.Definition, "1000000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, xid, err := e.srv.Store.OpenPosition(ctx, "alice.testnet", bid, ExecParams{Amount: "1000000000", Held: plan.Held}, plan.Steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 409) // run still in flight
+	if _, err := e.db.Exec(ctx, `update executions set updated_at=now() - interval '1 hour' where id=$1`, xid); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := sweep.Once(ctx, e.db); err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	if err := e.srv.Store.Finish(ctx, xid, nil, 0, "succeeded", ""); !errors.Is(err, sweep.ErrSwept) {
+		t.Fatal("late finish must not overwrite a swept run", err)
+	}
+	if pos := e.position(tok, pid); pos["state"] != "withdrawing" {
+		t.Fatal(pos)
+	}
+	// died after lending: usdc lent, nothing staked
+	e.chain.live = planner.Live{Lent: map[string]string{"usdc.t": "498000000"}, Staked: "0", Wallet: map[string]string{"usdc.t": "0", "wrap.t": "0"}}
+	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, map[string]int{"bps": 100}, 202)
+	e.srv.Wait()
+	last := e.exec.calls[len(e.exec.calls)-1]
+	if len(last) != 2 || last[0].Kind != planner.KindWithdrawLend || last[0].Amount != "498000000" || last[1].Kind != planner.KindToOwner {
+		t.Fatalf("recovery steps %+v", last)
+	}
+	if pos := e.position(tok, pid); pos["state"] != "closed" {
+		t.Fatal(pos)
+	}
 }

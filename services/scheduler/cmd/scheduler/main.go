@@ -16,6 +16,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/near"
 	"github.com/Debanjannnn/nearly/internal/shared/pg"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 	"github.com/Debanjannnn/nearly/services/scheduler/internal/keys"
 	"github.com/Debanjannnn/nearly/services/scheduler/internal/market"
 	"github.com/Debanjannnn/nearly/services/scheduler/internal/sched"
@@ -51,13 +52,14 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	go sweep.Run(ctx, db, 5*time.Minute)
 	md := &market.Client{URL: strings.TrimRight(mdURL, "/"), HTTP: &http.Client{Timeout: 10 * time.Second}}
 	s := &sched.Scheduler{
 		Store:  sched.Store{DB: db},
 		Plan:   &planner.Planner{Tokens: dep.Tokens, LST: dep.Venues.Staking, LSTPool: dep.LSTPool, Q: md, SlippageBps: slip},
 		Market: md,
 		Keys:   &keys.Checker{RPC: near.New(rpcURL), ExecutorKey: execKey},
-		Exec:   &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "scheduler", HTTP: &http.Client{Timeout: 15 * time.Minute}},
+		Exec:   &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "scheduler", HTTP: &http.Client{Timeout: executor.MaxRun}},
 		Tick:   tick,
 	}
 	ran := make(chan struct{})
