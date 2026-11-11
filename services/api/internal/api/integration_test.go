@@ -194,22 +194,34 @@ func (e *env) do(method, path, tok string, body any, want int) map[string]any {
 	return out
 }
 
-// login signs the shared NEP-413 message with a fresh key registered as full access.
-func (e *env) login(acct string) string {
+// signed registers a fresh full-access key for acct and signs the login message over nonce.
+func (e *env) signed(acct string, nonce []byte) map[string]string {
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	pk := auth.EncodeKey(pub)
 	e.chain.mu.Lock()
 	e.chain.full[acct] = pk
 	e.chain.mu.Unlock()
-	nonce := make([]byte, 32)
-	copy(nonce, acct)
-	nonce[31] = byte(time.Now().UnixNano())
-	body := map[string]string{
+	return map[string]string{
 		"account_id": acct, "public_key": pk, "nonce": base64.StdEncoding.EncodeToString(nonce),
 		"signature": base64.StdEncoding.EncodeToString(ed25519.Sign(priv, auth.Hash(auth.Message, auth.Recipient, nonce))),
 	}
+}
+
+func (e *env) issue() []byte {
+	n, err := base64.StdEncoding.DecodeString(e.do("GET", "/api/v1/auth/nonce", "", nil, 200)["nonce"].(string))
+	if err != nil || len(n) != 32 {
+		e.t.Fatal("bad nonce", err)
+	}
+	return n
+}
+
+// login signs a server-issued nonce; a replay of the same body is rejected.
+func (e *env) login(acct string) string {
+	body := e.signed(acct, e.issue())
 	tok := e.do("POST", "/api/v1/auth", "", body, 200)["token"].(string)
-	e.do("POST", "/api/v1/auth", "", body, 401) // replay rejected
+	if out := e.do("POST", "/api/v1/auth", "", body, 401); out["error"] != "invalid_nonce" {
+		e.t.Fatal("replay", out)
+	}
 	return tok
 }
 
@@ -244,6 +256,19 @@ func TestAuth(t *testing.T) {
 	e.do("POST", "/api/v1/auth", "", body, 401) // valid sig but not a full-access key of eve
 	e.do("GET", "/api/v1/me", "", nil, 401)
 	e.do("GET", "/api/v1/me", "garbage", nil, 401)
+	if out := e.do("POST", "/api/v1/auth", "", e.signed("eve.testnet", auth.NewNonce()), 401); out["error"] != "invalid_nonce" {
+		t.Fatal("unknown nonce", out)
+	}
+	old := e.issue()
+	if _, err := e.db.Exec(context.Background(), `update auth_nonces set expires_at = now() - interval '1 second' where nonce=$1`, old); err != nil {
+		t.Fatal(err)
+	}
+	if out := e.do("POST", "/api/v1/auth", "", e.signed("eve.testnet", old), 401); out["error"] != "invalid_nonce" {
+		t.Fatal("expired nonce", out)
+	}
+	if out := e.do("POST", "/api/v1/auth", "", e.signed("eve.testnet", e.issue()), 200); out["token"] == nil {
+		t.Fatal(out)
+	}
 	tok := e.login("alice.testnet")
 	if out := e.do("GET", "/api/v1/me", tok, nil, 200); out["account_id"] != "alice.testnet" || out["key_status"] != "pending" && out["key_status"] != "none" {
 		t.Fatal(out)

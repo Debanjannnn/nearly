@@ -48,6 +48,7 @@ type Server struct {
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/auth/nonce", s.nonce)
 	mux.HandleFunc("POST /api/v1/auth", s.login)
 	mux.HandleFunc("GET /api/v1/baskets", s.publicBaskets)
 	mux.Handle("GET /api/v1/baskets/{id}", s.optionalMe(s.basket))
@@ -92,7 +93,7 @@ var (
 	ErrBadRequest    = &Err{http.StatusBadRequest, "bad_request"}
 	ErrUnauthorized  = &Err{http.StatusUnauthorized, "unauthorized"}
 	ErrSignature     = &Err{http.StatusUnauthorized, "invalid_signature"}
-	ErrNonceUsed     = &Err{http.StatusUnauthorized, "nonce_used"}
+	ErrNonce         = &Err{http.StatusUnauthorized, "invalid_nonce"}
 	ErrNoAccount     = &Err{http.StatusConflict, "account_not_ready"}
 	ErrRevoked       = &Err{http.StatusConflict, "executor_revoked"}
 	ErrKeyActive     = &Err{http.StatusConflict, "executor_key_active"}

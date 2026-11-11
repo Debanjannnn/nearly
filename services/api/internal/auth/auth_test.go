@@ -86,3 +86,10 @@ func TestSessions(t *testing.T) {
 }
 
 func sha(b []byte) []byte { h := sha256.Sum256(b); return h[:] }
+
+func TestNewNonce(t *testing.T) {
+	a, b := NewNonce(), NewNonce()
+	if len(a) != 32 || bytes.Equal(a, b) {
+		t.Fatalf("%x %x", a, b)
+	}
+}

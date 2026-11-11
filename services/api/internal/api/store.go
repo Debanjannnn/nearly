@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
@@ -120,12 +119,19 @@ func (p Store) EnsureUser(ctx context.Context, a string) error {
 	return err
 }
 
-// UseNonce records a login nonce; ErrNonceUsed when seen before.
+// IssueNonce stores a fresh login nonce (ttl is the column default) and drops expired unused ones.
+func (p Store) IssueNonce(ctx context.Context, nonce []byte) error {
+	_, err := p.DB.Exec(ctx, `with gc as (delete from auth_nonces where account_id is null and expires_at < now())
+		insert into auth_nonces (nonce) values ($1)`, nonce)
+	return err
+}
+
+// UseNonce consumes an issued, unexpired, unused nonce for a; ErrNonce otherwise.
 func (p Store) UseNonce(ctx context.Context, nonce []byte, a string) error {
-	_, err := p.DB.Exec(ctx, `insert into auth_nonces (nonce, account_id) values ($1, $2)`, nonce, a)
-	var pe *pgconn.PgError
-	if errors.As(err, &pe) && pe.Code == "23505" {
-		return ErrNonceUsed
+	tag, err := p.DB.Exec(ctx, `update auth_nonces set account_id=$2
+		where nonce=$1 and account_id is null and expires_at > now()`, nonce, a)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNonce
 	}
 	return err
 }
