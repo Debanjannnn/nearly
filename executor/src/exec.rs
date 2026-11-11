@@ -1,4 +1,5 @@
 //! Runs a step plan on one user account: recheck all, then sign + land each step in order.
+use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -197,7 +198,14 @@ impl Executor {
 }
 
 /// Final outcome -> ok or the failure the chain reported.
+/// `on_settle` returns the amount the venue took: "0" = venue failed, funds refunded.
 fn outcome(hash: &str, v: &Value) -> Result<String, (Option<String>, String)> {
+    let used = v["status"]["SuccessValue"]
+        .as_str()
+        .and_then(|b| B64.decode(b).ok());
+    if used.as_deref() == Some(b"\"0\"") {
+        return Err((Some(hash.into()), "venue failed, refunded".into()));
+    }
     match v["status"].get("Failure") {
         None if v["status"].is_object() => Ok(hash.into()),
         None => Err((
@@ -215,6 +223,16 @@ mod tests {
     #[test]
     fn outcome_status() {
         assert!(outcome("h", &json!({"status": {"SuccessValue": ""}})).is_ok());
+        assert!(outcome(
+            "h",
+            &json!({"status": {"SuccessValue": B64.encode("\"5\"")}})
+        )
+        .is_ok());
+        let e = outcome(
+            "h",
+            &json!({"status": {"SuccessValue": B64.encode("\"0\"")}}),
+        );
+        assert_eq!(e.unwrap_err().1, "venue failed, refunded");
         let e = outcome(
             "h",
             &json!({"status": {"Failure": {"ActionError": {"kind": "x"}}}}),
