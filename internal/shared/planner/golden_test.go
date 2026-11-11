@@ -16,6 +16,7 @@ var update = flag.Bool("update", false, "rewrite testdata/planner golden files")
 const (
 	usdc  = "usdcc.ft.ref-labs.testnet"
 	wnear = "wrap.testnet"
+	lst   = "linear-protocol.testnet"
 )
 
 // fakeQ prices 1 wnear (24 dec) at 3 usdc (6 dec).
@@ -30,7 +31,7 @@ func (fakeQ) Quote(_ context.Context, _ uint64, in, _ string, a *big.Int) (*big.
 }
 
 func newP() *Planner {
-	return &Planner{Tokens: map[string]string{"usdc": usdc, "wnear": wnear}, Q: fakeQ{}, SlippageBps: 50}
+	return &Planner{Tokens: map[string]string{"usdc": usdc, "wnear": wnear}, Q: fakeQ{}, SlippageBps: 50, LST: lst}
 }
 
 var basket = Basket{DriftBps: 500, Legs: []Leg{
@@ -42,16 +43,17 @@ var basket = Basket{DriftBps: 500, Legs: []Leg{
 
 // golden is one shared planner<->executor fixture: input + the exact steps the executor will run.
 type golden struct {
-	Op     string   `json:"op"`
-	Basket *Basket  `json:"basket,omitempty"`
-	Amount string   `json:"amount,omitempty"`
-	Held   []string `json:"held,omitempty"`
-	Values []string `json:"values,omitempty"`
-	Bps    int      `json:"bps,omitempty"`
-	Plan   []Step   `json:"plan,omitempty"`
-	Done   int      `json:"done,omitempty"`
-	Live   *Live    `json:"live,omitempty"`
-	Steps  []Step   `json:"steps"`
+	Op      string   `json:"op"`
+	Basket  *Basket  `json:"basket,omitempty"`
+	Amount  string   `json:"amount,omitempty"`
+	Held    []string `json:"held,omitempty"`
+	Values  []string `json:"values,omitempty"`
+	Bps     int      `json:"bps,omitempty"`
+	Plan    []Step   `json:"plan,omitempty"`
+	Done    int      `json:"done,omitempty"`
+	Live    *Live    `json:"live,omitempty"`
+	LSTPool *uint64  `json:"lst_pool,omitempty"`
+	Steps   []Step   `json:"steps"`
 }
 
 func (g golden) run(p *Planner) ([]Step, error) {
@@ -86,7 +88,9 @@ func TestGolden(t *testing.T) {
 			if err := json.Unmarshal(b, &g); err != nil {
 				t.Fatal(err)
 			}
-			got, err := g.run(newP())
+			p := newP()
+			p.LSTPool = g.LSTPool
+			got, err := g.run(p)
 			if err != nil {
 				t.Fatal(err)
 			}

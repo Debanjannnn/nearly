@@ -495,3 +495,155 @@ fn unstake_failure_restores_position() {
     );
     assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(1_000));
 }
+
+fn results(r: Vec<PromiseResult>) {
+    testing_env!(
+        ctx(ME, exec_pk(), 0).build(),
+        near_sdk::test_vm_config(),
+        RuntimeFeesConfig::test(),
+        Default::default(),
+        r
+    );
+}
+
+fn ok(v: &str) -> PromiseResult {
+    PromiseResult::Successful(format!("\"{v}\"").into_bytes())
+}
+
+/// (method, args) of every function call this test made.
+fn calls() -> Vec<(String, String)> {
+    near_sdk::test_utils::get_created_receipts()
+        .iter()
+        .flat_map(|r| r.actions.iter())
+        .filter_map(|a| match a {
+            near_sdk::mock::MockAction::FunctionCallWeight {
+                method_name, args, ..
+            } => Some((
+                String::from_utf8(method_name.clone()).unwrap(),
+                String::from_utf8(args.clone()).unwrap(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn owner_withdraw_ok_returns_amount() {
+    let c = setup();
+    settle_with(ok("500"));
+    assert_eq!(c.on_withdraw(U128(500)), U128(500));
+}
+
+#[test]
+#[should_panic(expected = "transfer failed, refunded to ledger")]
+fn owner_withdraw_fails_when_transfer_refunded() {
+    let c = setup();
+    settle_with(ok("0"));
+    c.on_withdraw(U128(500));
+}
+
+#[test]
+fn get_balance_reads_ledger() {
+    let c = setup();
+    assert_eq!(c.get_balance(acc(USDC)), U128(2_000));
+    assert_eq!(c.get_balance(acc(WNEAR)), U128(0));
+}
+
+fn lst_exit(amount: u128) -> Step {
+    Step::Swap {
+        pool_id: 3515,
+        token_in: acc("lst.testnet"),
+        token_out: acc(WNEAR),
+        amount_in: U128(amount),
+        min_out: U128(1),
+    }
+}
+
+#[test]
+fn lst_exit_debits_staking_position() {
+    let mut c = setup();
+    c.positions.insert(STAKING_KEY.into(), 1_000);
+    as_executor();
+    c.execute_step(lst_exit(400));
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(600));
+    let methods: Vec<_> = calls().into_iter().map(|(m, _)| m).collect();
+    assert_eq!(methods, ["ft_price", "ft_balance_of", "on_lst_exit"]);
+}
+
+#[test]
+#[should_panic(expected = "over cap")]
+fn lst_exit_uses_near_cap() {
+    let mut c = setup();
+    c.positions.insert(STAKING_KEY.into(), 10_000);
+    as_executor();
+    c.execute_step(lst_exit(5_001));
+}
+
+fn swapped_shares() -> String {
+    let (_, args) = calls()
+        .into_iter()
+        .find(|(m, _)| m == "ft_transfer_call")
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_str(&args).unwrap();
+    let msg: serde_json::Value = serde_json::from_str(v["msg"].as_str().unwrap()).unwrap();
+    assert_eq!(v["amount"], msg["actions"][0]["amount_in"]);
+    v["amount"].as_str().unwrap().into()
+}
+
+#[test]
+fn lst_partial_exit_sells_value_at_price() {
+    let mut c = setup();
+    // 1 share = 1.25 NEAR: 1e24 NEAR value = 0.8e24 shares
+    results(vec![
+        ok("1250000000000000000000000"),
+        ok("5000000000000000000000000"),
+    ]);
+    c.on_lst_exit(3515, acc(WNEAR), U128(10u128.pow(24)), U128(1), false);
+    assert_eq!(swapped_shares(), "800000000000000000000000");
+}
+
+#[test]
+fn lst_full_exit_sells_whole_balance() {
+    let mut c = setup();
+    results(vec![
+        ok("1250000000000000000000000"),
+        ok("799999999999999999999998"),
+    ]);
+    c.on_lst_exit(3515, acc(WNEAR), U128(10u128.pow(24)), U128(1), true);
+    assert_eq!(swapped_shares(), "799999999999999999999998");
+}
+
+#[test]
+fn lst_exit_unreadable_price_refunds_position() {
+    let mut c = setup();
+    c.positions.insert(STAKING_KEY.into(), 600);
+    results(vec![PromiseResult::Failed, ok("5")]);
+    assert!(matches!(
+        c.on_lst_exit(3515, acc(WNEAR), U128(400), U128(1), false),
+        near_sdk::PromiseOrValue::Value(U128(0))
+    ));
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(1_000));
+}
+
+#[test]
+fn lst_swap_failure_refunds_position() {
+    let mut c = setup();
+    c.positions.insert(STAKING_KEY.into(), 600);
+    settle_with(ok("0"));
+    assert_eq!(c.on_lst_swap(U128(400)), U128(0));
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(1_000));
+    settle_with(ok("320"));
+    assert_eq!(c.on_lst_swap(U128(400)), U128(320));
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(1_000));
+}
+
+#[test]
+fn full_unstake_uses_unstake_all() {
+    let mut c = setup();
+    c.positions.insert(STAKING_KEY.into(), 1_000);
+    as_executor();
+    c.execute_step(Step::Unstake {
+        amount: U128(1_000),
+    });
+    assert_eq!(calls()[0].0, "unstake_all");
+}

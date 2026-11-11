@@ -67,7 +67,7 @@ func run() error {
 		Chain:       ch,
 		Exec:        &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "api", HTTP: &http.Client{Timeout: executor.MaxRun}},
 		Sessions:    &auth.Sessions{Secret: []byte(secret), TTL: ttl},
-		Plan:        &planner.Planner{Tokens: dep.Tokens, Q: ch, SlippageBps: slip},
+		Plan:        &planner.Planner{Tokens: dep.Tokens, LST: dep.Venues.Staking, LSTPool: dep.LSTPool, Q: ch, SlippageBps: slip},
 		Dep:         dep,
 		ExecutorKey: execKey,
 		Intents:     ic,

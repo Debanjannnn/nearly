@@ -49,7 +49,9 @@ impl Contract {
             } => {
                 require!(token_in != token_out, "same token");
                 require!(self.caps.contains_key(token_out), "token not whitelisted");
-                self.assert_cap(Some(token_in), amount_in.0);
+                // LST exit spends the staking position (NEAR value), capped like stake
+                let t = Some(token_in).filter(|t| **t != self.venues.staking);
+                self.assert_cap(t, amount_in.0);
             }
             Step::Stake { amount } | Step::Unstake { amount } => self.assert_cap(None, amount.0),
         }

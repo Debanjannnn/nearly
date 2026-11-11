@@ -110,6 +110,11 @@ impl Contract {
         self.balances.iter().map(|(t, b)| (t, U128(*b))).collect()
     }
 
+    /// Ledger balance of `token` the owner can `withdraw` now.
+    pub fn get_balance(&self, token: AccountId) -> U128 {
+        U128(self.balances.get(&token).copied().unwrap_or(0))
+    }
+
     pub fn get_positions(&self) -> Vec<(&String, U128)> {
         self.positions.iter().map(|(k, b)| (k, U128(*b))).collect()
     }

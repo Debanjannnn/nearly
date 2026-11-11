@@ -59,6 +59,7 @@ Picked over stNEAR/NEARX: same id pattern on both nets, accepted as Burrow colla
 | Stake | `deposit_and_stake()` payable (attach NEAR) | https://github.com/linear-protocol/LiNEAR/blob/main/contracts/linear/src/stake.rs |
 | Unstake (delayed, ~4 epochs) | `unstake{amount}` / `unstake_all()`, then `withdraw{amount}` / `withdraw_all()` | same |
 | Instant exit | swap LiNEAR to wNEAR on Ref pool 3515 | api.ref.finance |
+| Exit in nearly | `lst_pool` in deployments set: withdraw plans `swap` LiNEAR->wNEAR (`amount_in` = NEAR value, contract converts via `ft_price`; full exit sells all shares, so no 2-yocto dust). Unset (testnet): `unstake` (`unstake_all` on full exit) and the NEAR is claimed after ~4 epochs, not sent in the same withdraw | contracts/account/src/executor.rs |
 | Views | `ft_price()` (NEAR per LiNEAR, 24 dec), `get_summary()`, `get_account_details{account_id}` | https://github.com/linear-protocol/LiNEAR/blob/main/contracts/linear/src/view.rs, RPC |
 | APY source | derive from `ft_price` growth between two snapshots (annualise). No official APY endpoint found: UNCONFIRMED | |
 

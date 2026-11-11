@@ -56,7 +56,7 @@ func run() error {
 	md := &market.Client{URL: strings.TrimRight(mdURL, "/"), HTTP: &http.Client{Timeout: 10 * time.Second}}
 	s := &sched.Scheduler{
 		Store:  sched.Store{DB: db},
-		Plan:   &planner.Planner{Tokens: dep.Tokens, Q: md, SlippageBps: slip},
+		Plan:   &planner.Planner{Tokens: dep.Tokens, LST: dep.Venues.Staking, LSTPool: dep.LSTPool, Q: md, SlippageBps: slip},
 		Market: md,
 		Keys:   &keys.Checker{RPC: near.New(rpcURL), ExecutorKey: execKey},
 		Exec:   &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "scheduler", HTTP: &http.Client{Timeout: executor.MaxRun}},

@@ -50,7 +50,9 @@ trait Lending {
 trait Staking {
     fn deposit_and_stake(&mut self);
     fn unstake(&mut self, amount: U128);
+    fn unstake_all(&mut self);
     fn withdraw_all(&mut self);
+    fn ft_price(&self) -> U128;
 }
 
 pub fn ft_transfer(token: AccountId, to: AccountId, amount: u128) -> Promise {
@@ -139,6 +141,20 @@ pub fn unstake(staking: AccountId, amount: u128) -> Promise {
     ext_staking::ext(staking)
         .with_static_gas(GAS_UNSTAKE)
         .unstake(U128(amount))
+}
+
+/// Full exit: LiNEAR rounds staked balance down, so unstake(amount) can miss by a few yocto.
+pub fn unstake_all(staking: AccountId) -> Promise {
+    ext_staking::ext(staking)
+        .with_static_gas(GAS_UNSTAKE)
+        .unstake_all()
+}
+
+/// NEAR per LiNEAR share, 24 decimals.
+pub fn lst_price(staking: AccountId) -> Promise {
+    ext_staking::ext(staking)
+        .with_static_gas(GAS_VIEW)
+        .ft_price()
 }
 
 pub fn withdraw_unstaked(staking: AccountId) -> Promise {

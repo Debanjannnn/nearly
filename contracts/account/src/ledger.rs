@@ -17,7 +17,7 @@ pub enum Slot {
 }
 
 impl Contract {
-    fn slot(&self, slot: &Slot) -> u128 {
+    pub(crate) fn slot(&self, slot: &Slot) -> u128 {
         match slot {
             Slot::Balance(t) => self.balances.get(t).copied().unwrap_or(0),
             Slot::Position(k) => self.positions.get(k).copied().unwrap_or(0),

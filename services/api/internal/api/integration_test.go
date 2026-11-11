@@ -320,8 +320,11 @@ func TestDeployWithdrawResume(t *testing.T) {
 	if out["resumed"] != true {
 		t.Fatal(out)
 	}
-	last := e.exec.calls[len(e.exec.calls)-1]
-	if len(last) != 3 || last[0].Kind != planner.KindUnstake {
+	// no lst_pool: staked part unstakes (NEAR comes later via claim_unstaked), only usdc to owner
+	if last := e.exec.calls[len(e.exec.calls)-1]; fmt.Sprint(last) != fmt.Sprint([]planner.Step{
+		{Kind: planner.KindUnstake, Amount: "246510000000000000000"},
+		{Kind: planner.KindToOwner, Token: "usdc.t", Amount: "249000000"},
+	}) {
 		t.Fatalf("resume steps %+v", last)
 	}
 	if pos := e.position(tok, pid); pos["state"] != "closed" {
@@ -330,6 +333,42 @@ func TestDeployWithdrawResume(t *testing.T) {
 	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 409)
 	if h := e.do("GET", "/api/v1/me/holdings", tok, nil, 200); h["account_id"] != "alice.testnet.factory.t" {
 		t.Fatal(h)
+	}
+}
+
+func jsonStr(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+func TestWithdrawResumeLSTPool(t *testing.T) {
+	e := setup(t)
+	pool := uint64(7)
+	e.srv.Plan.LST, e.srv.Plan.LSTPool = "lst.t", &pool
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, basket, 201)["id"].(string)
+	pid := e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000000"}, 202)["position_id"].(string)
+	e.srv.Wait()
+
+	e.exec.failAt = 1 // the LiNEAR->wNEAR swap
+	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 202)
+	e.srv.Wait()
+	e.exec.failAt = -1
+	e.chain.live = planner.Live{
+		Lent: map[string]string{}, Staked: "493020000000000000000",
+		Wallet: map[string]string{"usdc.t": "498000000", "wrap.t": "0"},
+	}
+	if out := e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 202); out["resumed"] != true {
+		t.Fatal(out)
+	}
+	e.srv.Wait()
+	// with a pool the swap lands wNEAR now (1% slippage floor), so it goes to the owner too
+	if last := e.exec.calls[len(e.exec.calls)-1]; jsonStr(last) != jsonStr([]planner.Step{
+		{Kind: planner.KindSwap, PoolID: &pool, TokenIn: "lst.t", TokenOut: "wrap.t", AmountIn: "493020000000000000000", MinOut: "488089800000000000000"},
+		{Kind: planner.KindToOwner, Token: "usdc.t", Amount: "498000000"},
+		{Kind: planner.KindToOwner, Token: "wrap.t", Amount: "488089800000000000000"},
+	}) {
+		t.Fatalf("resume steps %+v", last)
+	}
+	if pos := e.position(tok, pid); pos["state"] != "closed" {
+		t.Fatal(pos)
 	}
 }
 
