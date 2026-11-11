@@ -43,7 +43,7 @@ export const setToken = (t: string | null) => {
   token = t;
 };
 
-async function authed<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+export async function authed<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   if (!token) throw new ApiError(401, "unauthorized");
   return request<T>(API_URL + path, {
     method,
@@ -66,6 +66,10 @@ export const postAuth = (b: AuthInput) =>
     body: JSON.stringify(b),
   });
 export const createAccount = () => authed<UserAccount>("/me/account", "POST");
+
+// keyed by deployments token key (usdc, wnear); balance is raw
+export type Holdings = { account_id: string; tokens: Record<string, { token: string; balance: string }> };
+export const getHoldings = () => authed<Holdings>("/me/holdings");
 
 export const shortId = (s: string) => (s.length > 20 ? `${s.slice(0, 8)}…${s.slice(-8)}` : s);
 

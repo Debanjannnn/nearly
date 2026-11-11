@@ -1,6 +1,6 @@
 "use client";
 
-import type { NearConnector } from "@hot-labs/near-connect";
+import type { NearConnector, SignAndSendTransactionsParams } from "@hot-labs/near-connect";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ApiError, createAccount, errText, postAuth, setToken } from "./api";
 import { NETWORK, RPC_URL } from "./config";
@@ -20,6 +20,8 @@ export type Session = {
   error: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  // signs with the connected wallet; resolves tx hashes, throws if any tx failed
+  send: (txs: SignAndSendTransactionsParams["transactions"]) => Promise<string[]>;
 };
 
 const Ctx = createContext<Session | null>(null);
@@ -124,6 +126,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     save(null);
   }, [save]);
 
+  const send = useCallback(async (transactions: SignAndSendTransactionsParams["transactions"]) => {
+    const c = connector.current;
+    if (!c) throw new Error("wallet not ready");
+    const out = await (await c.wallet()).signAndSendTransactions({ transactions });
+    const bad = out.find((o) => typeof o.status === "object" && "Failure" in o.status);
+    if (bad) throw new Error(`transaction ${bad.transaction_outcome.id} failed`);
+    return out.map((o) => o.transaction_outcome.id);
+  }, []);
+
   return (
     <Ctx.Provider
       value={{
@@ -135,6 +146,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         error,
         login,
         logout,
+        send,
       }}
     >
       {children}
