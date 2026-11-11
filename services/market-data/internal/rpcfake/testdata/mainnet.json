@@ -1,0 +1,49 @@
+{
+ "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1 ft_metadata {}@0": {
+  "decimals": 6,
+  "symbol": "USDC"
+ },
+ "block@0": {
+  "height": 224097939,
+  "timestamp": 1794419326408778852
+ },
+ "block@223089939": {
+  "height": 223089939,
+  "timestamp": 1793837899372223810
+ },
+ "contract.main.burrow.near get_asset {\"token_id\":\"17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\"}@0": {
+  "borrow_apr": "0.160840448564926117292342882",
+  "supply_apr": "0.10446764241892509130173546",
+  "token_id": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+ },
+ "contract.main.burrow.near get_asset {\"token_id\":\"wrap.near\"}@0": {
+  "borrow_apr": "0.024959652602618203002286338",
+  "supply_apr": "0.003271817696321938127404093",
+  "token_id": "wrap.near"
+ },
+ "linear-protocol.near ft_metadata {}@0": {
+  "decimals": 24,
+  "symbol": "LINEAR"
+ },
+ "linear-protocol.near ft_price {}@0": "1430758745601909871936580",
+ "linear-protocol.near ft_price {}@223089939": "1429658821468183321013724",
+ "linear-protocol.near ft_price {}@224097939": "1430758745601909871936580",
+ "v2.ref-finance.near get_pool {\"pool_id\":4512}@0": {
+  "amounts": [
+   "981514891976",
+   "260301774254716729876081792862"
+  ],
+  "amp": 0,
+  "pool_kind": "SIMPLE_POOL",
+  "shares_total_supply": "93958464153230782041445003034",
+  "token_account_ids": [
+   "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+   "wrap.near"
+  ],
+  "total_fee": 30
+ },
+ "wrap.near ft_metadata {}@0": {
+  "decimals": 24,
+  "symbol": "wNEAR"
+ }
+}
