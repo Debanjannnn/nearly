@@ -33,7 +33,9 @@ type Server struct {
 	PoolIDs []uint64
 	// MaxAge: a value older than this is stale; quotes on a stale pool are refused.
 	MaxAge time.Duration
-	Now    func() time.Time
+	// StakeEvery widens MaxAge for staking rates, which refresh only that often.
+	StakeEvery time.Duration
+	Now        func() time.Time
 }
 
 // Handler serves the routes; origins are CORS origins (scheme://host[:port] or "*"), also allowed on the WebSocket.
@@ -72,7 +74,12 @@ func (s *Server) load(w http.ResponseWriter, ctx context.Context, key string, ou
 func (s *Server) rates(w http.ResponseWriter, r *http.Request) {
 	var v []store.Rate
 	if s.load(w, r.Context(), store.KeyRates, &v) {
-		stale := slices.ContainsFunc(v, func(x store.Rate) bool { return s.stale(x.Ts) })
+		stale := slices.ContainsFunc(v, func(x store.Rate) bool {
+			if x.Venue == "staking" {
+				return s.Now().Sub(time.UnixMilli(x.Ts)) > s.MaxAge+s.StakeEvery
+			}
+			return s.stale(x.Ts)
+		})
 		httpx.JSON(w, http.StatusOK, map[string]any{"rates": v, "stale": stale || len(v) == 0})
 	}
 }

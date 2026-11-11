@@ -19,7 +19,7 @@ const usdc, wnear = "usdcc.ft.ref-labs.testnet", "wrap.testnet"
 func server(t *testing.T) (*Server, http.Handler) {
 	st := store.Store{RDB: redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()}), Net: "testnet"}
 	now := time.UnixMilli(1_000_000)
-	s := &Server{Store: st, Hub: hub.New(), PoolIDs: []uint64{1900, 7}, MaxAge: time.Minute, Now: func() time.Time { return now }}
+	s := &Server{Store: st, Hub: hub.New(), PoolIDs: []uint64{1900, 7}, MaxAge: time.Minute, StakeEvery: time.Hour, Now: func() time.Time { return now }}
 	ctx := t.Context()
 	// testnet pool 1900 as recorded
 	st.Put(ctx, store.KeyPool(1900), quote.Pool{ID: 1900, Kind: "SIMPLE_POOL", Tokens: []string{wnear, usdc},
@@ -65,10 +65,14 @@ func TestQuote(t *testing.T) {
 }
 
 func TestRatesAndPrices(t *testing.T) {
-	_, h := server(t)
+	s, h := server(t)
 	code, b := get(t, h, "/api/v1/rates")
-	if code != 200 || len(b["rates"].([]any)) != 2 || b["stale"] != true {
+	if code != 200 || len(b["rates"].([]any)) != 2 || b["stale"] != false {
 		t.Fatal(code, b)
+	}
+	s.StakeEvery = 0
+	if _, b := get(t, h, "/api/v1/rates"); b["stale"] != true {
+		t.Fatal(b)
 	}
 	if code, b := get(t, h, "/api/v1/prices"); code != 503 || b["error"] != "unavailable" {
 		t.Fatal(code, b)

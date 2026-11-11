@@ -74,7 +74,7 @@ func run() error {
 	h := hub.New()
 	p := &poll.Poller{Venue: venue.Reader{RPC: rpc, Archival: near.New(archURL)}, Dep: dep, PoolIDs: pools,
 		Store: st, Publish: h.Publish, StakeEvery: stakeEvery, Now: time.Now}
-	srv := &routes.Server{Store: st, Hub: h, PoolIDs: pools, MaxAge: maxAge, Now: time.Now}
+	srv := &routes.Server{Store: st, Hub: h, PoolIDs: pools, MaxAge: maxAge, StakeEvery: stakeEvery, Now: time.Now}
 	handler := srv.Handler(origins, map[string]httpx.Check{
 		"redis": func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
 		"rpc":   func(ctx context.Context) error { _, err := rpc.Block(ctx, 0); return err },
