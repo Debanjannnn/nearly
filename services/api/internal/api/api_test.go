@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Debanjannnn/nearly/internal/shared/config"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
@@ -44,6 +45,16 @@ func TestIntentRequest(t *testing.T) {
 	q, ok2 := in.request("a", "b", "r", "")
 	if ok2 || q.SwapType != "EXACT_INPUT" || q.SlippageTolerance != 100 || q.Deadline.IsZero() {
 		t.Fatalf("empty refund accepted or bad defaults: %+v", q)
+	}
+}
+
+func TestAbandonedIntent(t *testing.T) {
+	old, tx := time.Now().Add(-3*quoteTTL), "h"
+	if !abandoned(&Intent{Status: "PENDING_DEPOSIT", CreatedAt: old}) ||
+		abandoned(&Intent{Status: "PENDING_DEPOSIT", CreatedAt: time.Now()}) ||
+		abandoned(&Intent{Status: "PENDING_DEPOSIT", CreatedAt: old, DepositTx: &tx}) ||
+		abandoned(&Intent{Status: "PROCESSING", CreatedAt: old}) {
+		t.Fatal("abandoned")
 	}
 }
 

@@ -96,15 +96,15 @@ func (s *Server) quote(w http.ResponseWriter, r *http.Request, kind string, q in
 
 // intentStatus lists the user's swaps (or one, by ?deposit_address), refreshing non-terminal ones from 1Click.
 func (s *Server) intentStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	list, err := s.Store.Intents(ctx, account(r), r.URL.Query().Get("deposit_address"))
+	ctx, addr := r.Context(), r.URL.Query().Get("deposit_address")
+	list, err := s.Store.Intents(ctx, account(r), addr)
 	if err != nil {
 		fail(w, "intents", err)
 		return
 	}
 	for i := range list {
 		x := &list[i]
-		if intents.Terminal(x.Status) {
+		if intents.Terminal(x.Status) || addr == "" && abandoned(x) {
 			continue
 		}
 		st, err := s.Intents.Status(ctx, x.DepositAddress, x.DepositMemo)
@@ -122,6 +122,11 @@ func (s *Server) intentStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	reply(w, "intents", list, nil)
+}
+
+// abandoned: never funded, long past its deadline; only a ?deposit_address lookup re-polls it.
+func abandoned(x *Intent) bool {
+	return x.Status == "PENDING_DEPOSIT" && x.DepositTx == nil && time.Since(x.CreatedAt) > 2*quoteTTL
 }
 
 // submitIntent passes the user's deposit tx hash to 1Click so it is picked up sooner.
