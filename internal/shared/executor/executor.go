@@ -7,10 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 )
+
+// MaxRun bounds one Execute call; a run older than this is dead.
+const MaxRun = 15 * time.Minute
 
 type Result struct {
 	Index  int    `json:"index"`

@@ -18,6 +18,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/near"
 	"github.com/Debanjannnn/nearly/internal/shared/pg"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 	"github.com/Debanjannnn/nearly/services/api/internal/api"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 	"github.com/Debanjannnn/nearly/services/api/internal/chain"
@@ -58,14 +59,15 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	go sweep.Run(ctx, db, 5*time.Minute)
 	ch := &chain.Chain{RPC: near.New(rpcURL), Dep: dep, ExecutorKey: execKey}
 	mux := httpx.NewMux(map[string]httpx.Check{"postgres": db.Ping})
 	srv := &api.Server{
 		Store:       api.Store{DB: db},
 		Chain:       ch,
-		Exec:        &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "api", HTTP: &http.Client{Timeout: 15 * time.Minute}},
+		Exec:        &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "api", HTTP: &http.Client{Timeout: executor.MaxRun}},
 		Sessions:    &auth.Sessions{Secret: []byte(secret), TTL: ttl},
-		Plan:        &planner.Planner{Tokens: dep.Tokens, Q: ch, SlippageBps: slip},
+		Plan:        &planner.Planner{Tokens: dep.Tokens, LST: dep.Venues.Staking, LSTPool: dep.LSTPool, Q: ch, SlippageBps: slip},
 		Dep:         dep,
 		ExecutorKey: execKey,
 		Intents:     ic,

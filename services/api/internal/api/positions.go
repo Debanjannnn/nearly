@@ -2,13 +2,16 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/big"
 	"net/http"
 	"time"
 
+	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 )
 
 func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
@@ -106,17 +109,26 @@ func (s *Server) withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 	var params ExecParams
 	execID, steps, err := s.Store.ClaimWithdraw(ctx, me, pid, func(pos Position, def planner.Basket, last *LastWithdraw) ([]planner.Step, ExecParams, error) {
+		steps, done := []planner.Step(nil), 0
 		if last == nil {
+			if pos.State == "withdrawing" {
+				bps = 10_000 // swept dead deploy: unwind it all, capped by live state below
+			}
 			plan, err := s.Plan.Withdraw(def, pos.Held, bps)
 			params = ExecParams{Bps: bps, HeldAfter: plan.Held}
-			return plan.Steps, params, err
+			if err != nil || pos.State == "open" {
+				return plan.Steps, params, err
+			}
+			steps = plan.Steps
+		} else {
+			params = ExecParams{Bps: last.Params.Bps, HeldAfter: last.Params.HeldAfter, ResumeOf: last.ID}
+			steps, done = last.Steps, last.StepsDone
 		}
-		params = ExecParams{Bps: last.Params.Bps, HeldAfter: last.Params.HeldAfter, ResumeOf: last.ID}
-		live, err := s.Chain.Live(ctx, sub, last.Steps[min(last.StepsDone, len(last.Steps)):])
+		live, err := s.Chain.Live(ctx, sub, steps[min(done, len(steps)):])
 		if err != nil {
 			return nil, params, rpc("live state", err)
 		}
-		steps, err := s.Plan.ResumeWithdraw(last.Steps, last.StepsDone, live)
+		steps, err = s.Plan.ResumeWithdraw(steps, done, live)
 		return steps, params, err
 	})
 	if err != nil {
@@ -141,9 +153,12 @@ func (s *Server) run(execID, sub string, steps []planner.Step, after func(ctx co
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		ectx, cancel := context.WithTimeout(context.Background(), executor.MaxRun)
+		results, err := s.Exec.Execute(ectx, sub, execID, steps)
+		cancel()
+		// own ctx: an executor timeout must not leave the run stuck in 'running'
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		results, err := s.Exec.Execute(ctx, sub, execID, steps)
 		done, msg := 0, ""
 		for _, res := range results {
 			if res.Status != "ok" || res.Index != done {
@@ -164,7 +179,10 @@ func (s *Server) run(execID, sub string, steps []planner.Step, after func(ctx co
 		if ok {
 			status, msg = "succeeded", ""
 		}
-		if err := s.Store.Finish(ctx, execID, results, done, status, msg); err != nil {
+		if err := s.Store.Finish(ctx, execID, results, done, status, msg); errors.Is(err, sweep.ErrSwept) {
+			slog.Warn("run outlived sweep, results dropped", "execution", execID)
+			return
+		} else if err != nil {
 			slog.Error("finish execution", "execution", execID, "err", err)
 		}
 		after(ctx, done, ok)

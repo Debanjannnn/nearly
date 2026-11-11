@@ -4,6 +4,7 @@ package sched
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 )
 
 // Market gates every tick on fresh prices + rates and quotes swaps.
@@ -261,7 +263,7 @@ func (s *Scheduler) run(sub, execID string, steps []planner.Step, after func(ctx
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
-		ectx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		ectx, cancel := context.WithTimeout(context.Background(), executor.MaxRun)
 		results, err := s.Exec.Execute(ectx, sub, execID, steps)
 		cancel()
 		// own ctx: an executor timeout must not leave the run stuck in 'running'
@@ -286,7 +288,10 @@ func (s *Scheduler) run(sub, execID string, steps []planner.Step, after func(ctx
 		} else if msg == "" {
 			msg = "incomplete"
 		}
-		if err := s.Store.Finish(ctx, execID, results, done, status, msg); err != nil {
+		if err := s.Store.Finish(ctx, execID, results, done, status, msg); errors.Is(err, sweep.ErrSwept) {
+			slog.Warn("run outlived sweep, results dropped", "execution", execID)
+			return
+		} else if err != nil {
 			slog.Error("finish execution", "execution", execID, "err", err)
 		}
 		after(ctx, execID, done, ok)

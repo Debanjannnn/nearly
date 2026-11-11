@@ -44,16 +44,20 @@ func (p *Planner) Rebalance(ctx context.Context, b Basket, held, values []string
 		if take.Sign() == 0 {
 			continue
 		}
-		steps = append(steps, p.take(l, take)...)
+		st, got := p.take(l, take)
+		steps = append(steps, st...)
 		h[i].Sub(h[i], take)
 		if l.Token == Base {
-			freed.Add(freed, take)
+			freed.Add(freed, got)
+			continue
+		}
+		if got.Sign() == 0 {
 			continue
 		}
 		if sell[l.Token] == nil {
 			sell[l.Token], order = new(big.Int), append(order, i)
 		}
-		sell[l.Token].Add(sell[l.Token], take)
+		sell[l.Token].Add(sell[l.Token], got)
 	}
 	for _, j := range order {
 		l, in := b.Legs[j], sell[b.Legs[j].Token]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,7 +35,9 @@ func run() error {
 	depDir := e.Opt("DEPLOYMENTS_DIR", "contracts/deployments")
 	start := e.Int("START_HEIGHT", 0)
 	batch := e.Int("BATCH", 50)
-	every := e.Duration("POLL_EVERY", time.Second)
+	// free neardata allows ~30 req/min; 429s back off on top of this
+	every := e.Duration("POLL_EVERY", 5*time.Second)
+	maxLag := e.Int("MAX_LAG", 600)
 	full := e.Duration("RECONCILE_EVERY", 5*time.Minute)
 	addr := ":" + e.Opt("PORT", "8088")
 	if err := e.Err(); err != nil {
@@ -56,8 +59,10 @@ func run() error {
 	defer db.Close()
 
 	x := &loop.Indexer{Src: source.New(dataURL), RPC: near.New(rpcURL), Store: store.Store{DB: db},
-		Factory: dep.Factory, Tokens: dep.Tokens, Start: uint64(start), Batch: batch}
-	h := httpx.NewMux(map[string]httpx.Check{"postgres": func(ctx context.Context) error { return db.Ping(ctx) }})
+		Factory: dep.Factory, Tokens: dep.Tokens, Start: uint64(start), Batch: batch, MaxLag: uint64(maxLag)}
+	h := http.NewServeMux()
+	h.HandleFunc("GET /health", x.Health)
+	h.Handle("/", httpx.NewMux(map[string]httpx.Check{"postgres": func(ctx context.Context) error { return db.Ping(ctx) }}))
 	errc := make(chan error, 2)
 	go func() { errc <- x.Run(ctx, every, full) }()
 	go func() { errc <- httpx.Run(ctx, addr, h) }()

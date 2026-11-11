@@ -92,7 +92,7 @@ func TestWithdrawPartial(t *testing.T) {
 		tokenStep(KindWithdrawLend, wnear, big.NewInt(1500)),
 		tokenStep(KindUnstake, "", big.NewInt(1000)),
 		tokenStep(KindToOwner, usdc, big.NewInt(500)),
-		tokenStep(KindToOwner, wnear, big.NewInt(2750)),
+		tokenStep(KindToOwner, wnear, big.NewInt(1750)), // unstaked NEAR is not back yet
 	}
 	if b, w := mustJSON(pl.Steps), mustJSON(want); b != w {
 		t.Fatalf("got %s\nwant %s", b, w)
@@ -124,7 +124,7 @@ func TestResumeWithdraw(t *testing.T) {
 	want := []Step{
 		tokenStep(KindUnstake, "", big.NewInt(2000)),
 		tokenStep(KindToOwner, usdc, big.NewInt(1000)),
-		tokenStep(KindToOwner, wnear, big.NewInt(5500)),
+		tokenStep(KindToOwner, wnear, big.NewInt(3500)),
 	}
 	if b, w := mustJSON(got), mustJSON(want); b != w {
 		t.Fatalf("got %s\nwant %s", b, w)
@@ -136,6 +136,43 @@ func TestResumeWithdraw(t *testing.T) {
 	}
 	if _, err := newP().ResumeWithdraw(plan.Steps, 9, live); err == nil {
 		t.Fatal("done out of range")
+	}
+}
+
+func lstP() *Planner {
+	p, pool := newP(), uint64(3515)
+	p.LSTPool = &pool
+	return p
+}
+
+func TestWithdrawLSTExit(t *testing.T) {
+	pl, err := lstP().Withdraw(basket, []string{"1000", "3000", "2000", "500"}, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Step{
+		tokenStep(KindWithdrawLend, usdc, big.NewInt(500)),
+		tokenStep(KindWithdrawLend, wnear, big.NewInt(1500)),
+		swap(3515, lst, wnear, big.NewInt(1000), big.NewInt(995)),
+		tokenStep(KindToOwner, usdc, big.NewInt(500)),
+		tokenStep(KindToOwner, wnear, big.NewInt(1500+995+250)),
+	}
+	if b, w := mustJSON(pl.Steps), mustJSON(want); b != w {
+		t.Fatalf("got %s\nwant %s", b, w)
+	}
+	// resume: exit capped by what is still staked, min_out rescaled
+	live := Live{Staked: "400", Wallet: map[string]string{usdc: "500", wnear: "1750"}}
+	got, err := lstP().ResumeWithdraw(pl.Steps, 2, live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []Step{
+		swap(3515, lst, wnear, big.NewInt(400), big.NewInt(398)),
+		tokenStep(KindToOwner, usdc, big.NewInt(500)),
+		tokenStep(KindToOwner, wnear, big.NewInt(1750+398)),
+	}
+	if b, w := mustJSON(got), mustJSON(want); b != w {
+		t.Fatalf("got %s\nwant %s", b, w)
 	}
 }
 

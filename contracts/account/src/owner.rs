@@ -1,10 +1,12 @@
 //! Owner-only methods. Each needs 1 yocto so it must be signed with a full-access key.
 use near_sdk::json_types::U128;
-use near_sdk::{assert_one_yocto, env, near, require, AccountId, Promise};
+use near_sdk::{assert_one_yocto, env, near, require, AccountId, Gas, Promise};
 
 use crate::events::Event;
 use crate::venues;
 use crate::{Contract, ContractExt, Venues};
+
+const GAS_WITHDRAW_CB: Gas = Gas::from_tgas(5);
 
 impl Contract {
     /// Whitelists `token`; registers this account on it the first time.
@@ -34,7 +36,8 @@ impl Contract {
 
 #[near]
 impl Contract {
-    /// Always pays out to `owner`; there is no receiver argument.
+    /// Always pays out to `owner`; there is no receiver argument. The tx fails if the transfer
+    /// failed (ledger refunded by `on_settle` first), so callers can trust a success.
     #[payable]
     pub fn withdraw(&mut self, token: AccountId, amount: U128) -> Promise {
         self.assert_owner_call();
@@ -46,7 +49,21 @@ impl Contract {
             amount,
         }
         .emit();
-        self.send(token, owner, amount.0)
+        self.send(token, owner, amount.0).then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_WITHDRAW_CB)
+                .on_withdraw(amount),
+        )
+    }
+
+    /// Runs after `on_settle`, so panicking here keeps its refund.
+    #[private]
+    pub fn on_withdraw(&self, amount: U128) -> U128 {
+        let sent = env::promise_result_checked(0, 64)
+            .ok()
+            .and_then(|b| near_sdk::serde_json::from_slice::<U128>(&b).ok());
+        require!(sent == Some(amount), "transfer failed, refunded to ledger");
+        amount
     }
 
     #[payable]

@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
+	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 )
 
@@ -318,8 +320,11 @@ func TestDeployWithdrawResume(t *testing.T) {
 	if out["resumed"] != true {
 		t.Fatal(out)
 	}
-	last := e.exec.calls[len(e.exec.calls)-1]
-	if len(last) != 3 || last[0].Kind != planner.KindUnstake {
+	// no lst_pool: staked part unstakes (NEAR comes later via claim_unstaked), only usdc to owner
+	if last := e.exec.calls[len(e.exec.calls)-1]; fmt.Sprint(last) != fmt.Sprint([]planner.Step{
+		{Kind: planner.KindUnstake, Amount: "246510000000000000000"},
+		{Kind: planner.KindToOwner, Token: "usdc.t", Amount: "249000000"},
+	}) {
 		t.Fatalf("resume steps %+v", last)
 	}
 	if pos := e.position(tok, pid); pos["state"] != "closed" {
@@ -328,6 +333,42 @@ func TestDeployWithdrawResume(t *testing.T) {
 	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 409)
 	if h := e.do("GET", "/api/v1/me/holdings", tok, nil, 200); h["account_id"] != "alice.testnet.factory.t" {
 		t.Fatal(h)
+	}
+}
+
+func jsonStr(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+func TestWithdrawResumeLSTPool(t *testing.T) {
+	e := setup(t)
+	pool := uint64(7)
+	e.srv.Plan.LST, e.srv.Plan.LSTPool = "lst.t", &pool
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, basket, 201)["id"].(string)
+	pid := e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000000"}, 202)["position_id"].(string)
+	e.srv.Wait()
+
+	e.exec.failAt = 1 // the LiNEAR->wNEAR swap
+	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 202)
+	e.srv.Wait()
+	e.exec.failAt = -1
+	e.chain.live = planner.Live{
+		Lent: map[string]string{}, Staked: "493020000000000000000",
+		Wallet: map[string]string{"usdc.t": "498000000", "wrap.t": "0"},
+	}
+	if out := e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 202); out["resumed"] != true {
+		t.Fatal(out)
+	}
+	e.srv.Wait()
+	// with a pool the swap lands wNEAR now (1% slippage floor), so it goes to the owner too
+	if last := e.exec.calls[len(e.exec.calls)-1]; jsonStr(last) != jsonStr([]planner.Step{
+		{Kind: planner.KindSwap, PoolID: &pool, TokenIn: "lst.t", TokenOut: "wrap.t", AmountIn: "493020000000000000000", MinOut: "488089800000000000000"},
+		{Kind: planner.KindToOwner, Token: "usdc.t", Amount: "498000000"},
+		{Kind: planner.KindToOwner, Token: "wrap.t", Amount: "488089800000000000000"},
+	}) {
+		t.Fatalf("resume steps %+v", last)
+	}
+	if pos := e.position(tok, pid); pos["state"] != "closed" {
+		t.Fatal(pos)
 	}
 }
 
@@ -358,4 +399,48 @@ func TestSchedulesRevoke(t *testing.T) {
 	e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000"}, 409)
 	e.do("DELETE", "/api/v1/me/schedules/"+sid, tok, nil, 200)
 	e.do("DELETE", "/api/v1/me/schedules/"+sid, tok, nil, 404)
+}
+
+// A deploy killed mid-run is swept to withdrawing; the owner's withdraw unwinds what is live.
+func TestSweptDeployRecovers(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, basket, 201)["id"].(string)
+	b, err := e.srv.Store.Basket(ctx, bid, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := e.srv.Plan.Deploy(ctx, b.Definition, "1000000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, xid, err := e.srv.Store.OpenPosition(ctx, "alice.testnet", bid, ExecParams{Amount: "1000000000", Held: plan.Held}, plan.Steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 409) // run still in flight
+	if _, err := e.db.Exec(ctx, `update executions set updated_at=now() - interval '1 hour' where id=$1`, xid); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := sweep.Once(ctx, e.db); err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	if err := e.srv.Store.Finish(ctx, xid, nil, 0, "succeeded", ""); !errors.Is(err, sweep.ErrSwept) {
+		t.Fatal("late finish must not overwrite a swept run", err)
+	}
+	if pos := e.position(tok, pid); pos["state"] != "withdrawing" {
+		t.Fatal(pos)
+	}
+	// died after lending: usdc lent, nothing staked
+	e.chain.live = planner.Live{Lent: map[string]string{"usdc.t": "498000000"}, Staked: "0", Wallet: map[string]string{"usdc.t": "0", "wrap.t": "0"}}
+	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, map[string]int{"bps": 100}, 202)
+	e.srv.Wait()
+	last := e.exec.calls[len(e.exec.calls)-1]
+	if len(last) != 2 || last[0].Kind != planner.KindWithdrawLend || last[0].Amount != "498000000" || last[1].Kind != planner.KindToOwner {
+		t.Fatalf("recovery steps %+v", last)
+	}
+	if pos := e.position(tok, pid); pos["state"] != "closed" {
+		t.Fatal(pos)
+	}
 }
