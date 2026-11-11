@@ -12,11 +12,7 @@ import (
 	"time"
 )
 
-// Env collects every missing/invalid var so a service reports them all at once.
-//
-//	var e config.Env
-//	rpc := e.Str("NEAR_RPC_URL")
-//	if err := e.Err(); err != nil { ... }
+// Env collects every missing/invalid var so a service reports them all at once via Err.
 type Env struct{ errs []error }
 
 func (e *Env) Str(key string) string {
