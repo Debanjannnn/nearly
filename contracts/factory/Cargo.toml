@@ -1,0 +1,10 @@
+[package]
+name = "nearly-factory"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# near-sdk: pin the current version from https://docs.near.org/ before building
