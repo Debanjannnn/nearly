@@ -1,0 +1,9 @@
+.git
+.github
+.claude
+.env
+.env.*
+client
+**/target
+**/node_modules
+contracts/res
