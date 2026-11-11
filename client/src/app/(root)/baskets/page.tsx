@@ -1,11 +1,10 @@
-import { Card } from "@/components/ui";
+import { Suspense } from "react";
+import { BasketList } from "@/components/basket/BasketList";
 
 export default function Baskets() {
   return (
-    <main className="p-4 md:p-6">
-      <Card title="Baskets">
-        <p className="text-sm text-muted-foreground">Basket list coming soon.</p>
-      </Card>
-    </main>
+    <Suspense>
+      <BasketList />
+    </Suspense>
   );
 }
