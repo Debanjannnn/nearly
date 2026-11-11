@@ -42,6 +42,7 @@ trait Ft {
 #[ext_contract(ext_lending)]
 trait Lending {
     fn execute(&mut self, actions: Vec<near_sdk::serde_json::Value>);
+    fn get_asset(&self, token_id: AccountId) -> Option<near_sdk::serde_json::Value>;
 }
 
 #[allow(dead_code)]
@@ -91,9 +92,16 @@ pub fn supply(lending: AccountId, token: AccountId, amount: u128) -> Promise {
     ft_transfer_call(token, lending, amount, String::new(), GAS_SUPPLY)
 }
 
-/// `max_amount` withdraws up to `amount`, so share rounding can't fail it.
-pub fn withdraw_lend(lending: AccountId, token: AccountId, amount: u128) -> Promise {
-    let action = json!({"Withdraw": {"token_id": token, "max_amount": U128(amount)}});
+/// Lending asset config; withdraw amounts are in its inner units (token * 10^extra_decimals).
+pub fn lend_asset(lending: AccountId, token: AccountId) -> Promise {
+    ext_lending::ext(lending)
+        .with_static_gas(GAS_VIEW)
+        .get_asset(token)
+}
+
+/// `inner` is in lending inner units. `max_amount` withdraws up to it, so share rounding can't fail it.
+pub fn withdraw_lend(lending: AccountId, token: AccountId, inner: u128) -> Promise {
+    let action = json!({"Withdraw": {"token_id": token, "max_amount": U128(inner)}});
     ext_lending::ext(lending)
         .with_attached_deposit(ONE_YOCTO)
         .with_static_gas(GAS_WITHDRAW_LEND)

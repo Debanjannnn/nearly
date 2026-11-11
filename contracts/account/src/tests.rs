@@ -414,6 +414,8 @@ fn withdraw_lend_moves_position_to_balance() {
         amount: U128(300),
     });
     assert_eq!(c.positions.get(&key).copied(), Some(500));
+    settle_with(asset(12));
+    c.on_lend_asset(acc(USDC), U128(300));
     settle_with(PromiseResult::Successful(vec![]));
     c.on_settle(Some(Slot::Position(key.clone())), U128(300), None, false);
     // 2_000 tracked + 300 arrived
@@ -435,6 +437,45 @@ fn failed_withdraw_lend_restores_position() {
     });
     settle_with(PromiseResult::Failed);
     c.on_settle(Some(Slot::Position(key.clone())), U128(300), None, false);
+    assert_eq!(c.positions.get(&key).copied(), Some(800));
+}
+
+fn asset(extra_decimals: u64) -> PromiseResult {
+    let a = json!({"config": {"extra_decimals": extra_decimals}});
+    PromiseResult::Successful(a.to_string().into_bytes())
+}
+
+#[test]
+fn withdraw_lend_scales_to_inner_units() {
+    let mut c = setup();
+    let key = lending_key(&acc(USDC));
+    c.positions.insert(key.clone(), 800);
+    settle_with(asset(12));
+    c.on_lend_asset(acc(USDC), U128(300));
+    let args = String::from_utf8(
+        near_sdk::test_utils::get_created_receipts()[0]
+            .actions
+            .iter()
+            .find_map(|a| match a {
+                near_sdk::mock::MockAction::FunctionCallWeight { args, .. } => Some(args.clone()),
+                _ => None,
+            })
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        args.contains("\"max_amount\":\"300000000000000\""),
+        "{args}"
+    );
+}
+
+#[test]
+fn unknown_lend_asset_restores_position() {
+    let mut c = setup();
+    let key = lending_key(&acc(USDC));
+    c.positions.insert(key.clone(), 500);
+    settle_with(PromiseResult::Successful(b"null".to_vec()));
+    c.on_lend_asset(acc(USDC), U128(300));
     assert_eq!(c.positions.get(&key).copied(), Some(800));
 }
 

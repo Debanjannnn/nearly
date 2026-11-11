@@ -1,4 +1,5 @@
 //! Test-only Rhea lending stand-in: same supply/withdraw/storage surface, no interest, no oracle.
+//! Like the real venue, balances and withdraw amounts are inner units (token * 10^EXTRA_DECIMALS).
 use std::collections::{HashMap, HashSet};
 
 use near_sdk::json_types::U128;
@@ -7,6 +8,8 @@ use near_sdk::{
 };
 
 const MIN_STORAGE: NearToken = NearToken::from_millinear(100);
+const EXTRA_DECIMALS: u32 = 12;
+const SCALE: u128 = 10u128.pow(EXTRA_DECIMALS);
 
 #[near(serializers = [json])]
 pub struct AssetAmount {
@@ -24,7 +27,7 @@ pub enum Action {
 #[derive(Default)]
 pub struct Contract {
     registered: HashSet<AccountId>,
-    /// (account, token) -> supplied
+    /// (account, token) -> supplied, inner units
     supplied: HashMap<(AccountId, AccountId), u128>,
 }
 
@@ -59,7 +62,7 @@ impl Contract {
         *self
             .supplied
             .entry((sender_id, env::predecessor_account_id()))
-            .or_default() += amount.0;
+            .or_default() += amount.0 * SCALE;
         PromiseOrValue::Value(U128(0))
     }
 
@@ -79,6 +82,7 @@ impl Contract {
             };
             require!(amount <= *bal, "not enough supplied");
             *bal -= amount;
+            let amount = amount / SCALE;
             Promise::new(a.token_id)
                 .function_call(
                     "ft_transfer",
@@ -92,12 +96,21 @@ impl Contract {
         }
     }
 
+    pub fn get_asset(
+        &self,
+        #[allow(unused_variables)] token_id: AccountId,
+    ) -> near_sdk::serde_json::Value {
+        near_sdk::serde_json::json!({"config": {"extra_decimals": EXTRA_DECIMALS}})
+    }
+
+    /// In token units.
     pub fn get_supplied(&self, account_id: AccountId, token_id: AccountId) -> U128 {
         U128(
             self.supplied
                 .get(&(account_id, token_id))
                 .copied()
-                .unwrap_or(0),
+                .unwrap_or(0)
+                / SCALE,
         )
     }
 }
