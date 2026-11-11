@@ -1,7 +1,7 @@
 //! Internal ledger: token balances + venue positions, deposits in, settlement of outgoing calls.
 use near_sdk::json_types::U128;
 use near_sdk::serde_json;
-use near_sdk::{env, near, require, AccountId, Gas, Promise, PromiseOrValue};
+use near_sdk::{env, near, require, AccountId, Gas, Promise, PromiseError, PromiseOrValue};
 
 use crate::events::Event;
 use crate::{Contract, ContractExt};
@@ -110,8 +110,10 @@ impl Contract {
         credit_amount: Option<U128>,
         transfer_call: bool,
     ) -> U128 {
+        // only a real failure refunds; a long success result still means funds left
         let used = match env::promise_result_checked(0, 64) {
-            Err(_) => 0,
+            Err(PromiseError::Failed) => 0,
+            Err(_) => amount.0,
             // ft_resolve_transfer returns used amount; unparsable = assume all spent
             Ok(b) if transfer_call => {
                 serde_json::from_slice::<U128>(&b).map_or(amount.0, |u| u.0.min(amount.0))

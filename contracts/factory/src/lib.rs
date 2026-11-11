@@ -3,7 +3,8 @@ use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk::store::LookupMap;
 use near_sdk::{
-    env, near, require, AccountId, Allowance, Gas, NearToken, PanicOnDefault, Promise, PublicKey,
+    env, near, require, AccountId, Allowance, Gas, NearToken, PanicOnDefault, Promise,
+    PromiseError, PublicKey,
 };
 
 mod name;
@@ -115,7 +116,7 @@ impl Factory {
     /// Batch is atomic: on failure nothing exists, so free the name and refund the payer.
     #[private]
     pub fn on_create(&mut self, owner: AccountId, payer: AccountId, amount: NearToken) -> bool {
-        let ok = env::promise_result_checked(0, 0).is_ok();
+        let ok = !matches!(env::promise_result_checked(0, 0), Err(PromiseError::Failed));
         if !ok {
             self.accounts.remove(&owner);
             Promise::new(payer).transfer(amount).detach();

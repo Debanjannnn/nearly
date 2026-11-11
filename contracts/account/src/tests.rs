@@ -138,6 +138,16 @@ fn failed_transfer_is_refunded() {
 }
 
 #[test]
+fn long_success_result_is_not_refunded() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.withdraw(acc(USDC), U128(500));
+    settle_with(PromiseResult::Successful(vec![b'x'; 100]));
+    c.on_settle(Some(Slot::Balance(acc(USDC))), U128(500), None, None, false);
+    assert_eq!(bal(&c, USDC), 1_500);
+}
+
+#[test]
 fn executor_fee_and_to_owner() {
     let mut c = setup();
     as_executor();
