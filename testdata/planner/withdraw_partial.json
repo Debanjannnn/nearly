@@ -10,17 +10,20 @@
       {
         "token": "wnear",
         "source": "lending",
-        "weight_bps": 3000
+        "weight_bps": 3000,
+        "pool_id": 1900
       },
       {
         "token": "wnear",
         "source": "staking",
-        "weight_bps": 2000
+        "weight_bps": 2000,
+        "pool_id": 1900
       },
       {
         "token": "wnear",
         "source": "hold",
-        "weight_bps": 1000
+        "weight_bps": 1000,
+        "pool_id": 1900
       }
     ],
     "drift_bps": 500
@@ -35,7 +38,7 @@
   "steps": [
     {
       "kind": "withdraw_lend",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "99600000"
     },
     {
@@ -49,7 +52,7 @@
     },
     {
       "kind": "to_owner",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "99600000"
     },
     {

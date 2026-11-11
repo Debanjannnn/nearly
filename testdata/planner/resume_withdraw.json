@@ -3,7 +3,7 @@
   "plan": [
     {
       "kind": "withdraw_lend",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "398400000"
     },
     {
@@ -17,7 +17,7 @@
     },
     {
       "kind": "to_owner",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "398400000"
     },
     {
@@ -29,12 +29,12 @@
   "done": 1,
   "live": {
     "lent": {
-      "usdc.fakes.testnet": "0",
+      "usdcc.ft.ref-labs.testnet": "0",
       "wrap.testnet": "40000000000000000000000000"
     },
     "staked": "66400800000000000000000000",
     "wallet": {
-      "usdc.fakes.testnet": "398400000",
+      "usdcc.ft.ref-labs.testnet": "398400000",
       "wrap.testnet": "33200400000000000000000000"
     }
   },
@@ -50,7 +50,7 @@
     },
     {
       "kind": "to_owner",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "398400000"
     },
     {

@@ -14,7 +14,7 @@ import (
 var update = flag.Bool("update", false, "rewrite testdata/planner golden files")
 
 const (
-	usdc  = "usdc.fakes.testnet"
+	usdc  = "usdcc.ft.ref-labs.testnet"
 	wnear = "wrap.testnet"
 )
 
@@ -35,9 +35,9 @@ func newP() *Planner {
 
 var basket = Basket{DriftBps: 500, Legs: []Leg{
 	{Token: "usdc", Source: SourceLending, WeightBps: 4000},
-	{Token: "wnear", Source: SourceLending, WeightBps: 3000, PoolID: 0},
-	{Token: "wnear", Source: SourceStaking, WeightBps: 2000, PoolID: 0},
-	{Token: "wnear", Source: SourceHold, WeightBps: 1000, PoolID: 0},
+	{Token: "wnear", Source: SourceLending, WeightBps: 3000, PoolID: 1900},
+	{Token: "wnear", Source: SourceStaking, WeightBps: 2000, PoolID: 1900},
+	{Token: "wnear", Source: SourceHold, WeightBps: 1000, PoolID: 1900},
 }}
 
 // golden is one shared planner<->executor fixture: input + the exact steps the executor will run.

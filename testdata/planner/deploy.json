@@ -10,17 +10,20 @@
       {
         "token": "wnear",
         "source": "lending",
-        "weight_bps": 3000
+        "weight_bps": 3000,
+        "pool_id": 1900
       },
       {
         "token": "wnear",
         "source": "staking",
-        "weight_bps": 2000
+        "weight_bps": 2000,
+        "pool_id": 1900
       },
       {
         "token": "wnear",
         "source": "hold",
-        "weight_bps": 1000
+        "weight_bps": 1000,
+        "pool_id": 1900
       }
     ],
     "drift_bps": 500
@@ -29,20 +32,20 @@
   "steps": [
     {
       "kind": "fee",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "4000000"
     },
     {
       "kind": "swap",
-      "pool_id": 0,
-      "token_in": "usdc.fakes.testnet",
+      "pool_id": 1900,
+      "token_in": "usdcc.ft.ref-labs.testnet",
       "token_out": "wrap.testnet",
       "amount_in": "597600000",
       "min_out": "198204000000000000000000000"
     },
     {
       "kind": "supply",
-      "token": "usdc.fakes.testnet",
+      "token": "usdcc.ft.ref-labs.testnet",
       "amount": "398400000"
     },
     {
