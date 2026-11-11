@@ -219,7 +219,13 @@ func (e *env) onboard(acct string) string {
 		e.t.Fatal("want create_account tx", out)
 	}
 	e.chain.mu.Lock()
-	e.chain.accounts[acct], e.chain.execOn[acct+".factory.t"] = acct+".factory.t", true
+	e.chain.accounts[acct] = acct + ".factory.t" // mapped, create batch not landed yet
+	e.chain.mu.Unlock()
+	if out := e.do("POST", "/api/v1/me/account", tok, nil, 202); out["account_id"] != nil {
+		e.t.Fatal("in-flight create must stay pending", out)
+	}
+	e.chain.mu.Lock()
+	e.chain.execOn[acct+".factory.t"] = true
 	e.chain.mu.Unlock()
 	if out := e.do("POST", "/api/v1/me/account", tok, nil, 200); out["account_id"] != acct+".factory.t" || out["key_status"] != "active" {
 		e.t.Fatal(out)

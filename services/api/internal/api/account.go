@@ -78,20 +78,21 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sub != "" {
-		status := "revoked"
 		on, err := s.Chain.ExecutorKeyActive(ctx, sub)
 		if err != nil {
 			fail(w, "account", rpc("executor key", err))
 			return
 		}
-		if on {
-			status = "active"
+		if !on {
+			// factory maps the name before the create batch lands, and unmaps it if the batch fails
+			httpx.JSON(w, http.StatusAccepted, map[string]any{"account_id": nil, "key_status": "pending"})
+			return
 		}
-		if err := s.Store.SetAccount(ctx, me, sub, status); err != nil {
+		if err := s.Store.SetAccount(ctx, me, sub, "active"); err != nil {
 			fail(w, "set account", err)
 			return
 		}
-		httpx.JSON(w, http.StatusOK, map[string]string{"account_id": sub, "key_status": status})
+		httpx.JSON(w, http.StatusOK, map[string]string{"account_id": sub, "key_status": "active"})
 		return
 	}
 	deposit, err := s.Chain.RequiredDeposit(ctx)
