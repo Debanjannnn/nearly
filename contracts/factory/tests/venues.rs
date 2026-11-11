@@ -257,7 +257,7 @@ async fn stake_unstake_matches_venue() -> anyhow::Result<()> {
     e.step(e.stake(2 * NEAR)).await?;
     assert_eq!(e.ledger("get_positions", "staking").await?, 2 * NEAR);
     assert_eq!(
-        e.ledger("get_balances", &e.wnear.id().to_string()).await?,
+        e.ledger("get_balances", e.wnear.id().as_ref()).await?,
         0
     );
     assert_eq!(staked().await?, 2 * NEAR);
