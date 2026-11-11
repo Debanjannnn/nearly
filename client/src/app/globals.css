@@ -91,6 +91,56 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* weight sliders: --pct = filled share of the track */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--primary) var(--pct), var(--secondary) var(--pct));
+}
+
+.range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--primary) var(--pct), var(--secondary) var(--pct));
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  height: 14px;
+  width: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.range::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+/* variables, not overrides: the React Flow stylesheet loads after this file */
+.react-flow {
+  --xy-edge-stroke-default: var(--muted-foreground);
+  --xy-edge-stroke-width-default: 1.5;
+  --xy-background-pattern-dots-color-default: var(--border);
+  --xy-node-boxshadow-default: none;
+  --xy-node-border-default: none;
+  --xy-node-background-color-default: transparent;
+}
+
 :root {
   color-scheme: dark;
   --background: #101010;

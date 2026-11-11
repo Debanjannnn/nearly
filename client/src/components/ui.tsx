@@ -121,6 +121,12 @@ const TONE = {
 
 const STATUS_TONE: Record<string, keyof typeof TONE> = {
   confirmed: "good",
+  succeeded: "good",
+  active: "good",
+  running: "warn",
+  withdrawing: "warn",
+  paused: "muted",
+  revoked: "bad",
   submitted: "warn",
   pending: "warn",
   failed: "bad",

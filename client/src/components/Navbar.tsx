@@ -9,6 +9,7 @@ import { accountUrl, NETWORK } from "@/lib/config";
 import { useCopy } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import { BasketSearch } from "./BasketSearch";
 import { Row, Spinner, useDismissable } from "./ui";
 import { AnyChainButton } from "./deposit/AnyChainDeposit";
 import { AnyChainWithdrawButton } from "./deposit/AnyChainWithdraw";
@@ -60,6 +61,7 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center justify-end gap-2 sm:gap-6">
+          <BasketSearch />
           <nav aria-label="Main navigation" className="hidden items-center gap-6 md:flex">
             {links("inline-flex h-10 items-center px-2 text-[15px]")}
           </nav>
@@ -101,7 +103,7 @@ export function Navbar() {
 const MENU_BTN = "flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline";
 
 function WalletMenu() {
-  const { accountId, account, logout, error } = useSession();
+  const { accountId, account, logout, error, keyStatus } = useSession();
   const { open, setOpen, ref } = useDismissable();
 
   return (
@@ -121,6 +123,7 @@ function WalletMenu() {
             {accountId && <AccountRow label="Wallet" id={accountId} />}
             {account && <AccountRow label="Account" id={account} />}
             <Row label="Network">NEAR {NETWORK}</Row>
+            {keyStatus && <Row label="Automation key">{keyStatus}</Row>}
           </dl>
           <div className="flex gap-2">
             <AnyChainButton className={MENU_BTN} />

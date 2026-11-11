@@ -1,11 +1,5 @@
-import { Card } from "@/components/ui";
+import { BasketBuilder } from "@/components/basket/Builder";
 
 export default function NewBasket() {
-  return (
-    <main className="p-4 md:p-6">
-      <Card title="New basket">
-        <p className="text-sm text-muted-foreground">Basket builder coming soon.</p>
-      </Card>
-    </main>
-  );
+  return <BasketBuilder />;
 }
