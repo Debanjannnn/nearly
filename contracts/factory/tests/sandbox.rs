@@ -67,16 +67,16 @@ async fn executor_key_is_scoped_and_revocable() -> anyhow::Result<()> {
         .json()?;
     assert_eq!(id.as_str(), "alice-test-near.factory.test.near");
     let exec = Account::from_secret_key(id.clone(), exec_sk, &worker);
-    let step = json!({"step": {"kind": "stake", "amount": "1"}});
+    let step = json!({"step": {"kind": "unstake", "amount": "1"}});
 
-    // key accepted, contract runs: stake within cap succeeds against a no-op venue
+    // key accepted, contract runs: passes policy, then ledger rejects (no position)
     let ok = exec
         .call(&id, "execute_step")
         .args_json(&step)
         .gas(TX_GAS)
         .transact()
         .await?;
-    assert!(format!("{ok:?}").contains("EVENT_JSON"), "{ok:?}");
+    assert!(format!("{ok:?}").contains("insufficient balance"), "{ok:?}");
 
     let other = exec
         .call(&id, "set_near_cap")
@@ -99,7 +99,7 @@ async fn executor_key_is_scoped_and_revocable() -> anyhow::Result<()> {
     );
     let over = exec
         .call(&id, "execute_step")
-        .args_json(json!({"step": {"kind": "stake", "amount": "1001"}}))
+        .args_json(json!({"step": {"kind": "unstake", "amount": "1001"}}))
         .gas(TX_GAS)
         .transact()
         .await?;

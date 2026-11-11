@@ -103,7 +103,7 @@ func (p *Planner) put(l Leg, amount *big.Int) []Step {
 	case amount.Sign() == 0 || l.Source == SourceHold:
 		return nil
 	case l.Source == SourceStaking:
-		return []Step{tokenStep(KindStake, "", amount)}
+		return []Step{{Kind: KindStake, Token: p.id("wnear"), Amount: amount.String()}}
 	}
 	return []Step{tokenStep(KindSupply, p.id(l.Token), amount)}
 }

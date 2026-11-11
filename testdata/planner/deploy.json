@@ -55,6 +55,7 @@
     },
     {
       "kind": "stake",
+      "token": "wrap.testnet",
       "amount": "66068000000000000000000000"
     }
   ]

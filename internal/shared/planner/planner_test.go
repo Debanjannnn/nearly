@@ -22,7 +22,8 @@ func TestStepJSON(t *testing.T) {
 	var pool uint64
 	cases := map[string]Step{
 		`{"kind":"supply","token":"t","amount":"1"}`:                                               tokenStep(KindSupply, "t", big.NewInt(1)),
-		`{"kind":"stake","amount":"5"}`:                                                            tokenStep(KindStake, "t", big.NewInt(5)),
+		`{"kind":"stake","token":"t","amount":"5"}`:                                                tokenStep(KindStake, "t", big.NewInt(5)),
+		`{"kind":"unstake","amount":"5"}`:                                                          tokenStep(KindUnstake, "t", big.NewInt(5)),
 		`{"kind":"swap","pool_id":0,"token_in":"a","token_out":"b","amount_in":"2","min_out":"1"}`: swap(pool, "a", "b", big.NewInt(2), big.NewInt(1)),
 	}
 	for want, s := range cases {

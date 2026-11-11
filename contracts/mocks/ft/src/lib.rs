@@ -6,7 +6,9 @@ use near_contract_standards::storage_management::{
     StorageBalance, StorageBalanceBounds, StorageManagement,
 };
 use near_sdk::json_types::U128;
-use near_sdk::{near, AccountId, NearToken, PanicOnDefault, PromiseOrValue};
+use near_sdk::{
+    assert_one_yocto, env, near, AccountId, NearToken, PanicOnDefault, Promise, PromiseOrValue,
+};
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -28,6 +30,21 @@ impl Contract {
             self.token.internal_register_account(&account_id);
         }
         self.token.internal_deposit(&account_id, amount.0);
+    }
+
+    /// wNEAR surface: attached NEAR minted 1:1.
+    #[payable]
+    pub fn near_deposit(&mut self) {
+        let amount = env::attached_deposit().as_yoctonear();
+        self.mint(env::predecessor_account_id(), U128(amount));
+    }
+
+    #[payable]
+    pub fn near_withdraw(&mut self, amount: U128) -> Promise {
+        assert_one_yocto();
+        let who = env::predecessor_account_id();
+        self.token.internal_withdraw(&who, amount.0);
+        Promise::new(who).transfer(NearToken::from_yoctonear(amount.0))
     }
 }
 

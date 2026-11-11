@@ -18,7 +18,7 @@ const (
 )
 
 // Step is the shared step JSON (serde tag "kind"); omitempty keeps each kind to its own fields.
-// shortcut: stake/unstake amounts are wNEAR atoms (contract converts to LST); revisit if the LST step takes shares.
+// stake/unstake amounts are wNEAR atoms; stake carries the wNEAR token the contract unwraps.
 type Step struct {
 	Kind     string  `json:"kind"`
 	Token    string  `json:"token,omitempty"`
@@ -36,7 +36,7 @@ func swap(pool uint64, in, out string, amountIn, minOut *big.Int) Step {
 
 func tokenStep(kind, token string, amount *big.Int) Step {
 	s := Step{Kind: kind, Token: token, Amount: amount.String()}
-	if kind == KindStake || kind == KindUnstake {
+	if kind == KindUnstake {
 		s.Token = "" // staking venue holds one asset
 	}
 	return s

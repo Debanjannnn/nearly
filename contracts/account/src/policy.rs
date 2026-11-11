@@ -53,7 +53,11 @@ impl Contract {
                 let t = Some(token_in).filter(|t| **t != self.venues.staking);
                 self.assert_cap(t, amount_in.0);
             }
-            Step::Stake { amount } | Step::Unstake { amount } => self.assert_cap(None, amount.0),
+            Step::Stake { token, amount } => {
+                require!(self.caps.contains_key(token), "token not whitelisted");
+                self.assert_cap(None, amount.0)
+            }
+            Step::Unstake { amount } => self.assert_cap(None, amount.0),
         }
     }
 }

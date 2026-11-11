@@ -201,6 +201,7 @@ fn stake_over_near_cap_rejected() {
     let mut c = setup();
     as_executor();
     c.execute_step(Step::Stake {
+        token: acc(WNEAR),
         amount: U128(5_001),
     });
 }
@@ -342,19 +343,53 @@ fn supply_books_position_on_partial_use() {
     );
 }
 
+fn with_wnear(c: &mut Contract, amount: u128) {
+    set(WNEAR, other_pk(), 0);
+    c.ft_on_transfer(acc("bob.testnet"), U128(amount), String::new());
+}
+
 #[test]
-fn stake_failure_books_nothing() {
+fn stake_unwrap_failure_refunds_wnear() {
+    let mut c = setup();
+    with_wnear(&mut c, 100);
+    as_executor();
+    c.execute_step(Step::Stake {
+        token: acc(WNEAR),
+        amount: U128(100),
+    });
+    assert_eq!(bal(&c, WNEAR), 0);
+    settle_with(PromiseResult::Failed);
+    c.on_unwrap(acc(WNEAR), U128(100));
+    assert_eq!(bal(&c, WNEAR), 100);
+    assert!(c.positions.get(STAKING_KEY).is_none());
+}
+
+#[test]
+fn stake_books_position_only_on_success() {
+    let mut c = setup();
+    with_wnear(&mut c, 100);
+    as_executor();
+    c.execute_step(Step::Stake {
+        token: acc(WNEAR),
+        amount: U128(100),
+    });
+    settle_with(PromiseResult::Failed);
+    c.on_stake(acc(WNEAR), U128(100)); // re-wraps; observe credits later
+    assert!(c.positions.get(STAKING_KEY).is_none());
+    settle_with(PromiseResult::Successful(vec![]));
+    c.on_stake(acc(WNEAR), U128(100));
+    assert_eq!(c.positions.get(STAKING_KEY).copied(), Some(100));
+}
+
+#[test]
+#[should_panic(expected = "token not whitelisted")]
+fn stake_rejects_unknown_wrap_token() {
     let mut c = setup();
     as_executor();
-    c.execute_step(Step::Stake { amount: U128(100) });
-    settle_with(PromiseResult::Failed);
-    c.on_settle(
-        None,
-        U128(100),
-        Some(Slot::Position(STAKING_KEY.into())),
-        false,
-    );
-    assert!(c.positions.get(STAKING_KEY).is_none());
+    c.execute_step(Step::Stake {
+        token: acc("evil.testnet"),
+        amount: U128(1),
+    });
 }
 
 fn swap_step(min_out: u128) -> Step {

@@ -39,6 +39,13 @@ trait Ft {
 }
 
 #[allow(dead_code)]
+#[ext_contract(ext_wnear)]
+trait WNear {
+    fn near_withdraw(&mut self, amount: U128);
+    fn near_deposit(&mut self);
+}
+
+#[allow(dead_code)]
 #[ext_contract(ext_lending)]
 trait Lending {
     fn execute(&mut self, actions: Vec<near_sdk::serde_json::Value>);
@@ -53,6 +60,21 @@ trait Staking {
     fn unstake_all(&mut self);
     fn withdraw_all(&mut self);
     fn ft_price(&self) -> U128;
+}
+
+/// wNEAR -> NEAR to this account; 1 yocto per NEP-141 convention.
+pub fn unwrap(wnear: AccountId, amount: u128) -> Promise {
+    ext_wnear::ext(wnear)
+        .with_attached_deposit(ONE_YOCTO)
+        .with_static_gas(GAS_FT_TRANSFER)
+        .near_withdraw(U128(amount))
+}
+
+pub fn wrap(wnear: AccountId, amount: u128) -> Promise {
+    ext_wnear::ext(wnear)
+        .with_attached_deposit(NearToken::from_yoctonear(amount))
+        .with_static_gas(GAS_FT_TRANSFER)
+        .near_deposit()
 }
 
 pub fn ft_transfer(token: AccountId, to: AccountId, amount: u128) -> Promise {

@@ -134,6 +134,30 @@ async fn setup() -> anyhow::Result<Env> {
 }
 
 impl Env {
+    fn stake(&self, amount: u128) -> Value {
+        json!({"kind": "stake", "token": self.wnear.id(), "amount": amount.to_string()})
+    }
+
+    /// alice wraps NEAR and deposits the wNEAR into the account.
+    async fn fund_wnear(&self, amount: u128) -> anyhow::Result<()> {
+        let w = self.wnear.id();
+        self.alice
+            .call(w, "near_deposit")
+            .deposit(NearToken::from_yoctonear(amount))
+            .transact()
+            .await?
+            .into_result()?;
+        self.alice
+            .call(w, "ft_transfer_call")
+            .args_json(json!({"receiver_id": self.id, "amount": amount.to_string(), "msg": ""}))
+            .deposit(NearToken::from_yoctonear(1))
+            .max_gas()
+            .transact()
+            .await?
+            .into_result()?;
+        Ok(())
+    }
+
     async fn step(&self, step: Value) -> anyhow::Result<()> {
         self.exec
             .call(&self.id, "execute_step")
@@ -229,9 +253,13 @@ async fn stake_unstake_matches_venue() -> anyhow::Result<()> {
         )
     };
 
-    e.step(json!({"kind": "stake", "amount": (2 * NEAR).to_string()}))
-        .await?;
+    e.fund_wnear(2 * NEAR).await?;
+    e.step(e.stake(2 * NEAR)).await?;
     assert_eq!(e.ledger("get_positions", "staking").await?, 2 * NEAR);
+    assert_eq!(
+        e.ledger("get_balances", &e.wnear.id().to_string()).await?,
+        0
+    );
     assert_eq!(staked().await?, 2 * NEAR);
 
     e.step(json!({"kind": "unstake", "amount": (NEAR / 2).to_string()}))
@@ -267,7 +295,8 @@ async fn lst_exit_swaps_shares_to_wnear() -> anyhow::Result<()> {
         json!({"kind": "swap", "pool_id": 3515, "token_in": lst, "token_out": wnear,
                "amount_in": amount.to_string(), "min_out": "1"})
     };
-    e.step(json!({"kind": "stake", "amount": "1000"})).await?;
+    e.fund_wnear(1000).await?;
+    e.step(e.stake(1000)).await?;
     assert_eq!(e.ft_balance(&e.staking).await?, 1000);
 
     // partial: 400 NEAR value at price 1 = 400 shares, dex pays 2x
