@@ -78,17 +78,27 @@ func query(reqType, account string, extra map[string]any) map[string]any {
 
 // View calls a view method with JSON args and decodes its JSON return into out.
 func (c *Client) View(ctx context.Context, contract, method string, args, out any) error {
+	return c.ViewAt(ctx, 0, contract, method, args, out)
+}
+
+// ViewAt is View at a block height (0 = final). Plain RPC nodes keep only ~1.5 days of state.
+func (c *Client) ViewAt(ctx context.Context, height uint64, contract, method string, args, out any) error {
 	a, err := json.Marshal(args)
 	if err != nil {
 		return err
+	}
+	p := query("call_function", contract, map[string]any{
+		"method_name": method, "args_base64": base64.StdEncoding.EncodeToString(a),
+	})
+	if height > 0 {
+		delete(p, "finality")
+		p["block_id"] = height
 	}
 	// result is a JSON array of u8, which []byte would expect as base64
 	var r struct {
 		Raw []int `json:"result"`
 	}
-	if err := c.Call(ctx, "query", query("call_function", contract, map[string]any{
-		"method_name": method, "args_base64": base64.StdEncoding.EncodeToString(a),
-	}), &r); err != nil {
+	if err := c.Call(ctx, "query", p, &r); err != nil {
 		return err
 	}
 	b := make([]byte, len(r.Raw))
@@ -129,6 +139,24 @@ type TxStatus struct {
 	Status map[string]json.RawMessage `json:"status"`
 	// receipts_outcome kept raw: callers that need receipt detail decode it themselves
 	ReceiptsOutcome json.RawMessage `json:"receipts_outcome"`
+}
+
+// BlockHeader.Timestamp is unix nanoseconds.
+type BlockHeader struct {
+	Height    uint64 `json:"height"`
+	Timestamp uint64 `json:"timestamp"`
+}
+
+// Block returns the header at height (0 = final).
+func (c *Client) Block(ctx context.Context, height uint64) (BlockHeader, error) {
+	p := map[string]any{"finality": "final"}
+	if height > 0 {
+		p = map[string]any{"block_id": height}
+	}
+	var b struct {
+		Header BlockHeader `json:"header"`
+	}
+	return b.Header, c.Call(ctx, "block", p, &b)
 }
 
 func (s TxStatus) Failed() bool { _, ok := s.Status["Failure"]; return ok }
