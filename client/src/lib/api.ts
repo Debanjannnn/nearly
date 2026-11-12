@@ -213,6 +213,7 @@ export const runBacktest = (basket: BasketDef, amount = "1000", from?: string) =
       initialUsd: b.initial_usd,
       finalUsd: b.final_usd,
       apyUsd: b.apy,
+      returnUsd: b.total_return,
       maxDrawdownUsd: b.max_drawdown,
       rebalances: b.rebalances,
       costsUsd: b.costs_usd,
