@@ -11,6 +11,7 @@ import { Panel, Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Flash, TabPill } from "@/components/motion";
 import { holdingsSeries, RANGES, type Range } from "./series";
+import { LIVE_MATCHES_HISTORY } from "@/lib/tokens";
 
 const usd2 = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -29,7 +30,7 @@ export function ValueChart({ legs, flat, total, loading }: { legs: { market: str
   // no price history for anything held: value is flat over the range
   const points = series.length === 1 ? [{ t: series[0].t - (ms ?? 30 * 86400e3), v: total }, ...series] : series;
   const first = points[0]?.v ?? total;
-  const diff = total - first;
+  const diff = (points.at(-1)?.v ?? total) - first;
   const up = diff >= 0;
   const [whole, cents] = usd2(total).split(".");
   const fmtT = (t: number) =>
@@ -117,7 +118,7 @@ export function ValueChart({ legs, flat, total, loading }: { legs: { market: str
           </ResponsiveContainer>
         )}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">Your current holdings valued at past daily closes; the last point is live.</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">Your current holdings valued at past daily closes{LIVE_MATCHES_HISTORY ? "; the last point is live." : " (mainnet closes; change excludes testnet live prices)."}</p>
     </Panel>
   );
 }

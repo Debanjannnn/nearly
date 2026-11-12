@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -215,6 +216,36 @@ func (p Store) Positions(ctx context.Context, a string) ([]Position, error) {
 func (p Store) Position(ctx context.Context, a, id string) (Position, error) {
 	rows, err := p.DB.Query(ctx, `select `+positionCols+` where p.account_id=$1 and p.id=$2`, a, id)
 	return one(rows, err, scanPosition)
+}
+
+// HoldHeld sums, per token key, what hold legs of the account's unclosed positions keep in the account wallet.
+func (p Store) HoldHeld(ctx context.Context, a string) (map[string]*big.Int, error) {
+	type row struct {
+		def  planner.Basket
+		held []string
+	}
+	rows, err := p.DB.Query(ctx, `select b.definition, p.held from positions p join baskets b on b.id=p.basket_id
+		where p.account_id=$1 and p.state <> 'closed'`, a)
+	list, err := collect(rows, err, func(r pgx.CollectableRow) (row, error) {
+		var x row
+		return x, r.Scan(&x.def, &x.held)
+	})
+	out := map[string]*big.Int{}
+	for _, x := range list {
+		for i, l := range x.def.Legs {
+			v, ok := new(big.Int), false
+			if l.Source == planner.SourceHold && i < len(x.held) {
+				v, ok = v.SetString(x.held[i], 10)
+			}
+			if ok {
+				if out[l.Token] == nil {
+					out[l.Token] = new(big.Int)
+				}
+				out[l.Token].Add(out[l.Token], v)
+			}
+		}
+	}
+	return out, err
 }
 
 func insertExec(ctx context.Context, tx pgx.Tx, a string, posID, kind string, params ExecParams, steps []planner.Step) (string, error) {

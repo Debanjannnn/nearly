@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"log/slog"
+	"math/big"
 	"net/http"
 
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
@@ -179,9 +180,9 @@ func (s *Server) holdings(w http.ResponseWriter, r *http.Request) {
 		fail(w, "holdings", err)
 		return
 	}
-	bals, err := s.Chain.Balances(ctx, *u.SubAccount)
+	bals, err := s.free(ctx, account(r), *u.SubAccount)
 	if err != nil {
-		fail(w, "holdings", rpc("ft_balance_of", err))
+		fail(w, "holdings", err)
 		return
 	}
 	type holding struct {
@@ -207,4 +208,32 @@ func (s *Server) ready(r *http.Request) (string, error) {
 		return "", ErrRevoked
 	}
 	return *u.SubAccount, nil
+}
+
+// free is the sub-account's ledger per token key minus what open positions' hold legs keep there.
+func (s *Server) free(ctx context.Context, me, sub string) (map[string]string, error) {
+	bals, err := s.Chain.Balances(ctx, sub)
+	if err != nil {
+		return nil, rpc("ft_balance_of", err)
+	}
+	hold, err := s.Store.HoldHeld(ctx, me)
+	return freeOf(bals, hold), err
+}
+
+func freeOf(bals map[string]string, hold map[string]*big.Int) map[string]string {
+	out := map[string]string{}
+	for k, b := range bals {
+		v, ok := new(big.Int).SetString(b, 10)
+		if !ok {
+			v = new(big.Int)
+		}
+		if h := hold[k]; h != nil {
+			v.Sub(v, h)
+		}
+		if v.Sign() < 0 {
+			v.SetInt64(0)
+		}
+		out[k] = v.String()
+	}
+	return out
 }

@@ -261,6 +261,7 @@ const COPY: Record<string, string> = {
   unknown_pool: "No Rhea pool for this pair.",
   quote_unavailable: "Pool quote unavailable, try again shortly.",
   insufficient_liquidity: "Pool can't fill this size right now.",
+  insufficient_balance: "Not enough free USDC; tokens held by open baskets don't count.",
   amount_too_small: "Amount too small: the staking leg needs at least 0.01 NEAR.",
   nothing_to_withdraw: "Nothing left to withdraw.",
   executor_unavailable: "Executor unreachable; nothing was sent.",
