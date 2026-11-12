@@ -89,6 +89,14 @@ impl Contract {
         self.near_cap = cap.0;
     }
 
+    /// Daily limit = `steps` × per-step cap, per token.
+    #[payable]
+    pub fn set_daily_steps(&mut self, steps: u32) {
+        self.assert_owner_call();
+        require!(steps > 0, "zero steps");
+        self.daily_steps = steps;
+    }
+
     /// Deletes the executor key; every later executor call fails.
     #[payable]
     pub fn revoke_executor(&mut self) -> Promise {
