@@ -104,6 +104,7 @@ var (
 	ErrInvalidSched  = &Err{http.StatusBadRequest, "invalid_schedule"}
 	ErrInvalidBasket = &Err{http.StatusBadRequest, "invalid_basket"}
 	ErrIntents       = &Err{http.StatusBadGateway, "intents_unavailable"}
+	ErrInsufficient  = &Err{http.StatusUnprocessableEntity, "insufficient_balance"}
 )
 
 type accountKey struct{}

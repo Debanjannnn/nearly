@@ -1,5 +1,5 @@
 import type { Point } from "@/lib/hooks";
-import { decimalsOf, formatUnits, keyOf, LIVE_MATCHES_HISTORY } from "@/lib/tokens";
+import { LIVE_MATCHES_HISTORY } from "@/lib/tokens";
 
 const D = 86400e3;
 // history keeps daily closes
@@ -27,13 +27,4 @@ export function holdingsSeries(legs: { amount: number; px: number; points: Point
   });
   // testnet live px isn't comparable to mainnet closes: end on the last close
   return same || !pts.length ? [...pts, { t: now, v: legs.reduce((v, l) => v + l.amount * l.px, flat) }] : pts;
-}
-
-// wallet minus atoms open positions' hold legs keep in the same account (already counted in position value)
-export function freeTokens<T extends { address: string; symbol: string; raw: string; amount: string }>(tokens: T[], hold: Map<string, bigint>): T[] {
-  return tokens.map((t) => {
-    const left = BigInt(t.raw) - (hold.get(t.address) ?? 0n);
-    const raw = left > 0n ? left : 0n;
-    return { ...t, raw: raw.toString(), amount: formatUnits(raw, decimalsOf(keyOf(t.symbol))) };
-  });
 }

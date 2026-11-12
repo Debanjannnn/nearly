@@ -1,6 +1,6 @@
 // bun run src/components/portfolio/series.check.ts
 import assert from "node:assert/strict";
-import { freeTokens, holdingsSeries } from "./series";
+import { holdingsSeries } from "./series";
 
 const c = (t: number, o: number, v: number) => ({ t, o, v });
 const s = holdingsSeries([{ amount: 2, px: 9, points: [c(10, 5, 6), c(30, 6, 8)] }, { amount: 1, px: 120, points: [c(20, 100, 110)] }], 50, 40, true);
@@ -13,8 +13,4 @@ assert.deepEqual(holdingsSeries([{ amount: 1, px: 4, points: [c(10, 4, 4)] }, { 
 assert.deepEqual(holdingsSeries([{ amount: 1, px: 14, points: [c(10, 3, 3), c(20, 3, 4)] }], 1, 30, false), [{ t: 10, v: 4 }, { t: 20, v: 5 }]);
 assert.deepEqual(holdingsSeries([], 7, 5, false), [{ t: 5, v: 7 }]);
 
-// hold-leg atoms leave the wallet amounts (clamped at 0); other tokens untouched
-const tok = (symbol: string, address: string, raw: string) => ({ symbol, address, raw, amount: "" });
-const free = freeTokens([tok("USDC", "usdc.x", "25000000"), tok("wNEAR", "wrap.x", "10"), tok("NEAR", "near", "5")], new Map([["usdc.x", 10_500_000n], ["wrap.x", 20n]]));
-assert.deepEqual(free.map((t) => [t.raw, t.amount]), [["14500000", "14.5"], ["0", "0"], ["5", "0.000000000000000000000005"]]);
 console.log("series ok");

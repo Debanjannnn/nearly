@@ -72,6 +72,7 @@ type fakeChain struct {
 	accounts map[string]string // owner -> sub
 	execOn   map[string]bool   // sub -> executor key present
 	live     planner.Live
+	bals     map[string]string // ledger per token key; nil = plenty of usdc
 }
 
 func (f *fakeChain) Quote(_ context.Context, _ uint64, _, _ string, in *big.Int) (*big.Int, error) {
@@ -96,7 +97,12 @@ func (f *fakeChain) RequiredDeposit(context.Context) (string, error) {
 	return "2000000000000000000000000", nil
 }
 func (f *fakeChain) Balances(context.Context, string) (map[string]string, error) {
-	return map[string]string{"usdc": "5", "wnear": "6"}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.bals == nil {
+		return map[string]string{"usdc": "1000000000000", "wnear": "6"}, nil
+	}
+	return f.bals, nil
 }
 func (f *fakeChain) Live(context.Context, string, []planner.Step) (planner.Live, error) {
 	f.mu.Lock()
@@ -363,6 +369,34 @@ func TestDeployWithdrawResume(t *testing.T) {
 	if h := e.do("GET", "/api/v1/me/holdings", tok, nil, 200); h["account_id"] != "alice.testnet.factory.t" {
 		t.Fatal(h)
 	}
+}
+
+// hold-leg tokens sit in the account ledger and in position.held: holdings and deploy see only the rest
+func TestHoldLegsNotFree(t *testing.T) {
+	e := setup(t)
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, map[string]any{"name": "hold", "definition": map[string]any{"legs": []map[string]any{
+		{"token": "usdc", "source": "hold", "weight_bps": 5000},
+		{"token": "wnear", "source": "hold", "weight_bps": 5000, "pool_id": 1900},
+	}}}, 201)["id"].(string)
+	e.chain.mu.Lock()
+	e.chain.bals = map[string]string{"usdc": "200000000", "wnear": "6"}
+	e.chain.mu.Unlock()
+	// 100 USDC: fee 0.4, 49.8 USDC stays as the usdc hold leg
+	pid := e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "100000000"}, 202)["position_id"].(string)
+	e.srv.Wait()
+	if pos := e.position(tok, pid); pos["state"] != "open" || pos["held"].([]any)[0] != "49800000" {
+		t.Fatal(pos)
+	}
+	h := e.do("GET", "/api/v1/me/holdings", tok, nil, 200)["tokens"].(map[string]any)
+	if u, w := h["usdc"].(map[string]any)["balance"], h["wnear"].(map[string]any)["balance"]; u != "150200000" || w != "0" {
+		t.Fatal(h)
+	}
+	if out := e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "150200001"}, 422); out["error"] != "insufficient_balance" {
+		t.Fatal(out)
+	}
+	e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "150200000"}, 202)
+	e.srv.Wait()
 }
 
 func jsonStr(v any) string { b, _ := json.Marshal(v); return string(b) }

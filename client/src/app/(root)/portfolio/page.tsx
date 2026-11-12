@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import { errText, fmtNum, getExecutions, getMyStrategies, getPositions, getStrategies } from "@/lib/api";
 import { useHoldings, useRates, useTickers } from "@/lib/hooks";
 import { useAsync, useSession } from "@/lib/session";
-import { tokenBySymbol, tokenIdOf } from "@/lib/tokens";
-import { freeTokens } from "@/components/portfolio/series";
+import { tokenBySymbol } from "@/lib/tokens";
 import { ErrorBox, Panel, Skeleton } from "@/components/ui";
 import { Holdings, type Row } from "@/components/portfolio/Holdings";
 import { ValueChart } from "@/components/portfolio/ValueChart";
@@ -29,14 +28,7 @@ export default function PortfolioPage() {
   const baskets = useAsync("strategies", () => getStrategies());
   const mine = useAsync(on ? "my-strategies" : null, getMyStrategies);
 
-  const strats = new Map([...(baskets.data ?? []), ...(mine.data ?? [])].map((b) => [b.id, b]));
-  const open = (positions.data ?? []).filter((p) => p.state !== "closed");
-  const hold = new Map<string, bigint>();
-  for (const p of open)
-    strats.get(p.basket_id)?.definition.legs.forEach((l, i) => {
-      if (l.source === "hold") hold.set(tokenIdOf(l.token), (hold.get(tokenIdOf(l.token)) ?? 0n) + BigInt(p.held[i] ?? "0"));
-    });
-  const h = holdings.data && { ...holdings.data, tokens: freeTokens(holdings.data.tokens, hold) };
+  const h = holdings.data;
   const raw = (sym: string) => (h ? BigInt(h.tokens.find((t) => t.symbol === sym)?.raw ?? 0) : undefined);
   const rows: Row[] = [];
   for (const t of h?.tokens ?? []) {
@@ -55,7 +47,9 @@ export default function PortfolioPage() {
     });
   }
   const tokensUsd = (h?.tokens ?? []).reduce((s, t) => s + Number(t.amount) * (priceOf(t.symbol) ?? 0), 0);
+  const strats = new Map([...(baskets.data ?? []), ...(mine.data ?? [])].map((b) => [b.id, b]));
   const names = Object.fromEntries([...(baskets.data ?? []), ...(mine.data ?? [])].map((b) => [b.id, b.name]));
+  const open = (positions.data ?? []).filter((p) => p.state !== "closed");
   const vals = open.map((p) => valueOf(p, strats.get(p.basket_id), priceOf));
   const posUsd = vals.reduce<number>((s, v) => s + (v ?? 0), 0);
   const depositUsd = open.reduce((s, p) => s + Number(p.deposit) / 1e6, 0);
