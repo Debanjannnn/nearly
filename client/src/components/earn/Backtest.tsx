@@ -1,0 +1,144 @@
+"use client";
+
+import { Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
+import { errText, fmtUsd } from "@/lib/api";
+import type { Backtest, Sleeve, SourceKind } from "@/lib/types";
+import { symbolOf } from "@/lib/tokens";
+import { ErrorBox, Skeleton, Stat } from "@/components/ui";
+import { defaultVenue, KIND_LABEL, protocolOf, venueName } from "./sources";
+import { ProtocolIcon } from "@/components/ProtocolIcon";
+import { TokenIcon } from "@/components/TokenIcon";
+import { cn } from "@/lib/utils";
+
+const COLORS = ["var(--primary)", "var(--chart-1)", "var(--chart-2)", "var(--warning)", "var(--chart-3)", "var(--chart-4)"];
+
+export const pct = (s: string | number | null | undefined, d = 2) =>
+  s === null || s === undefined || s === "" ? "-" : `${(Number(s) * 100).toFixed(d)}%`;
+
+// "price:wnear" | "apy:lending:usdc" | "apy:staking:wnear"
+// logos for a coverage chip: venue mark (apy only) + token
+function seriesIcons(series: string) {
+  const [t, a, b] = series.split(":");
+  if (t === "price") return { token: symbolOf(a) };
+  if (t === "apy") return { protocol: protocolOf(defaultVenue(a as SourceKind)), token: symbolOf(b) };
+  return {};
+}
+
+function seriesLabel(series: string) {
+  const [t, a, b] = series.split(":");
+  if (t === "price") return `${symbolOf(a)} price`;
+  if (t === "apy") return `${venueName(defaultVenue(a as SourceKind))} ${symbolOf(b)}`;
+  return series;
+}
+
+// equity over the backtest window + headline stats + coverage notes
+export function BacktestView({ bt, loading, error }: { bt: Backtest | null; loading: boolean; error: string | null }) {
+  if (error) return <ErrorBox message={errText(new Error(error))} />;
+  if (!bt) return loading ? <Skeleton className="h-80 w-full" /> : <p className="text-sm text-muted-foreground">Run a backtest to see history.</p>;
+  const data = bt.curve.map((p) => ({ day: p.day, usd: Number(p.usd) }));
+  // dedupe: multi-token runs repeat the same series per sleeve
+  const clamped = [...new Map(bt.coverage.filter((c) => c.note).map((c) => [seriesLabel(c.series), { ...c, label: seriesLabel(c.series) }])).values()];
+  return (
+    <div className="space-y-4">
+      <dl className="grid grid-cols-2 gap-6 md:grid-cols-3">
+        {bt.apyUsd !== null ? (
+          <Stat label="APY (USD)" value={<span className={bt.apyUsd < 0 ? "text-destructive" : "text-positive"}>{pct(bt.apyUsd)}</span>} />
+        ) : (
+          <Stat label={`Return (${bt.days}d)`} value={pct(bt.returnUsd)} note="window too short to annualize" />
+        )}
+        <Stat label="Max drawdown" value={pct(bt.maxDrawdownUsd)} />
+        <Stat label="Final" value={fmtUsd(Number(bt.finalUsd))} note={`from ${fmtUsd(Number(bt.initialUsd))} · ${bt.days}d`} />
+      </dl>
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+          <LineChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+            <CartesianGrid vertical={false} strokeDasharray="3 4" stroke="var(--border)" />
+            <XAxis dataKey="day" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={48} />
+            <YAxis
+              orientation="right"
+              domain={["auto", "auto"]}
+              tickFormatter={(v: number) => fmtUsd(v)}
+              tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              width={72}
+            />
+            <Tooltip
+              contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 }}
+              formatter={(v) => [fmtUsd(Number(v)), "Basket"]}
+            />
+            <Line type="linear" dataKey="usd" stroke="var(--primary)" strokeWidth={1.75} dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {bt.from} → {bt.to} · {bt.rebalances} rebalances · costs {fmtUsd(Number(bt.costsUsd))}
+      </p>
+      {clamped.length > 0 && (
+        <div className="space-y-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs">
+          {clamped.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-muted-foreground">Window shortened to the data every source has</p>
+              <div className="flex flex-wrap gap-2">
+                {clamped.map((c) => (
+                  <span key={c.label} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-2.5 pl-1.5">
+                    <SeriesIcons series={c.series} />
+                    {c.label}
+                    <span className="text-muted-foreground">
+                      {c.first} → {c.last}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// token → source slices; token prefix only when there are several
+// stacked: donut above a full-width legend (narrow cards)
+export function AllocationDonut({ sleeves, stacked = false }: { sleeves: Sleeve[]; stacked?: boolean }) {
+  const data = sleeves.flatMap((sl) =>
+    sl.sources.map((s) => ({
+      name: `${sleeves.length > 1 ? `${sl.asset} · ` : ""}${KIND_LABEL[s.kind]} · ${venueName(s.venue)}`,
+      value: (sl.weightBps * s.weightBps) / 10000,
+    })),
+  );
+  return (
+    <div className={cn("flex items-center gap-6", stacked ? "flex-col" : "flex-wrap")}>
+      <div className={stacked ? "size-44" : "size-40"}>
+        <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
+          <PieChart>
+            <Pie data={data} dataKey="value" innerRadius="62%" outerRadius="100%" stroke="var(--card)" strokeWidth={2} isAnimationActive={false}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className={cn("space-y-2 text-sm", stacked ? "w-full" : "min-w-40 flex-1")}>
+        {data.map((d, i) => (
+          <li key={d.name} className="flex items-center gap-2">
+            <span className="size-2.5 shrink-0 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+            <span className="truncate">{d.name}</span>
+            <span className="tnum ml-auto text-muted-foreground">{+(d.value / 100).toFixed(2)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SeriesIcons({ series }: { series: string }) {
+  const { protocol, token } = seriesIcons(series);
+  return (
+    <span className="inline-flex items-center -space-x-1">
+      {protocol && <ProtocolIcon protocol={protocol} size={16} className="ring-2 ring-card" />}
+      {token && <TokenIcon symbol={token} size={16} className="ring-2 ring-card" />}
+    </span>
+  );
+}

@@ -1,8 +1,164 @@
+# Backend stack. Values come from .env (see .env.example); per-service tuning has defaults here.
+x-net: &net
+  NEAR_NETWORK: ${NEAR_NETWORK:-testnet}
+  RPC_URL: ${RPC_URL:-https://test.rpc.fastnear.com}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+x-db: &db postgres://${POSTGRES_USER:-nearly}:${POSTGRES_PASSWORD:-nearly}@postgres:5432/${POSTGRES_DB:-nearly}?sslmode=disable
+x-go: &go
+  restart: unless-stopped
+  depends_on:
+    migrate: { condition: service_completed_successfully }
+x-health: &health
+  interval: 10s
+  timeout: 3s
+  retries: 6
+  start_period: 10s
+
 services:
   postgres:
     image: postgres:16
-    environment: { POSTGRES_USER: nearly, POSTGRES_PASSWORD: nearly, POSTGRES_DB: nearly }
-    ports: ["5432:5432"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nearly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nearly}
+      POSTGRES_DB: ${POSTGRES_DB:-nearly}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      <<: *health
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+
   redis:
     image: redis:7
-    ports: ["6379:6379"]
+    restart: unless-stopped
+    ports: ["127.0.0.1:6379:6379"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "redis-cli", "ping"]
+
+  migrate:
+    image: postgres:16
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-nearly}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-nearly}
+      PGDATABASE: ${POSTGRES_DB:-nearly}
+    volumes:
+      - ./migrations:/migrations:ro
+      - ./scripts/migrate.sh:/migrate.sh:ro
+    entrypoint: ["sh", "/migrate.sh", "/migrations"]
+
+  # internal only: no published port, reached as http://executor:8083
+  executor:
+    build: { context: ., dockerfile: executor/Dockerfile }
+    restart: unless-stopped
+    environment:
+      NEAR_NETWORK: ${NEAR_NETWORK:-testnet}
+      RPC_URL: ${RPC_URL:-https://test.rpc.fastnear.com}
+      EXECUTOR_ACCOUNT_ID: ${EXECUTOR_ACCOUNT_ID:-}
+      EXECUTOR_PRIVATE_KEY: ${EXECUTOR_PRIVATE_KEY:-}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-}
+      MAX_STEP_USD: ${MAX_STEP_USD:-}
+      PRICE_POOL_ID: ${PRICE_POOL_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose: ["8083"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/health"]
+
+  api:
+    <<: *go
+    build: { context: ., dockerfile: infra/go.Dockerfile, args: { SERVICE: api } }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      executor: { condition: service_healthy }
+    environment:
+      <<: *net
+      PORT: "8080"
+      DATABASE_URL: *db
+      EXECUTOR_URL: http://executor:8083
+      EXECUTOR_PUBLIC_KEY: ${EXECUTOR_PUBLIC_KEY:-}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_TTL: ${SESSION_TTL:-24h}
+      SLIPPAGE_BPS: ${SLIPPAGE_BPS:-50}
+      INTENTS_JWT: ${INTENTS_JWT:-}
+    ports: ["${API_PORT:-8080}:8080"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+
+  market-data:
+    <<: *go
+    build: { context: ., dockerfile: infra/go.Dockerfile, args: { SERVICE: market-data } }
+    depends_on:
+      redis: { condition: service_healthy }
+    environment:
+      <<: *net
+      PORT: "8082"
+      REDIS_URL: redis://redis:6379
+      ARCHIVAL_RPC_URL: ${ARCHIVAL_RPC_URL:-https://archival-rpc.testnet.near.org}
+      POOL_IDS: ${POOL_IDS:-}
+      POLL_EVERY: ${MARKET_POLL_EVERY:-30s}
+    ports: ["${MARKET_DATA_PORT:-8082}:8082"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+
+  scheduler:
+    <<: *go
+    build: { context: ., dockerfile: infra/go.Dockerfile, args: { SERVICE: scheduler } }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      executor: { condition: service_healthy }
+      market-data: { condition: service_healthy }
+    environment:
+      <<: *net
+      PORT: "8084"
+      DATABASE_URL: *db
+      EXECUTOR_URL: http://executor:8083
+      EXECUTOR_PUBLIC_KEY: ${EXECUTOR_PUBLIC_KEY:-}
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-}
+      MARKET_DATA_URL: http://market-data:8082
+      TICK: ${SCHEDULER_TICK:-10s}
+      SLIPPAGE_BPS: ${SLIPPAGE_BPS:-50}
+    ports: ["127.0.0.1:8084:8084"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/health"]
+
+  history:
+    <<: *go
+    build: { context: ., dockerfile: infra/go.Dockerfile, args: { SERVICE: history } }
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      PORT: "8087"
+      DATABASE_URL: *db
+      # read-only views of mainnet venues; never sends a tx
+      HISTORY_NETWORK: ${HISTORY_NETWORK:-mainnet}
+      INGEST: ${HISTORY_INGEST:-true}
+      BACKFILL_DAYS: ${HISTORY_BACKFILL_DAYS:-180}
+    ports: ["${HISTORY_PORT:-8087}:8087"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "wget", "-qO-", "http://localhost:8087/health"]
+
+  indexer:
+    <<: *go
+    build: { context: ., dockerfile: infra/go.Dockerfile, args: { SERVICE: indexer } }
+    environment:
+      <<: *net
+      PORT: "8088"
+      DATABASE_URL: *db
+      START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
+      POLL_EVERY: ${INDEXER_POLL_EVERY:-5s}
+      MAX_LAG: ${INDEXER_MAX_LAG:-600}
+    ports: ["127.0.0.1:8088:8088"]
+    healthcheck:
+      <<: *health
+      test: ["CMD", "wget", "-qO-", "http://localhost:8088/health"]
+
+volumes:
+  pgdata:

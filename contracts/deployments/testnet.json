@@ -1,1 +1,14 @@
-{}
+{
+  "root": "nearly-dev-c7dc68.testnet",
+  "factory": "factory.nearly-dev-c7dc68.testnet",
+  "treasury": "treasury.nearly-dev-c7dc68.testnet",
+  "tokens": {
+    "usdc": "usdcc.ft.ref-labs.testnet",
+    "wnear": "wrap.testnet"
+  },
+  "venues": {
+    "lending": "burrow.services.ref-labs.testnet",
+    "dex": "ref-finance-101.testnet",
+    "staking": "linear-protocol.testnet"
+  }
+}

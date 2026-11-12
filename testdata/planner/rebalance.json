@@ -1,0 +1,67 @@
+{
+  "op": "rebalance",
+  "basket": {
+    "legs": [
+      {
+        "token": "usdc",
+        "source": "lending",
+        "weight_bps": 4000
+      },
+      {
+        "token": "wnear",
+        "source": "lending",
+        "weight_bps": 3000,
+        "pool_id": 1900
+      },
+      {
+        "token": "wnear",
+        "source": "staking",
+        "weight_bps": 2000,
+        "pool_id": 1900
+      },
+      {
+        "token": "wnear",
+        "source": "hold",
+        "weight_bps": 1000,
+        "pool_id": 1900
+      }
+    ],
+    "drift_bps": 500
+  },
+  "held": [
+    "300000000",
+    "100000000000000000000000000",
+    "60000000000000000000000000",
+    "30000000000000000000000000"
+  ],
+  "values": [
+    "300000000",
+    "300000000",
+    "180000000",
+    "90000000"
+  ],
+  "steps": [
+    {
+      "kind": "withdraw_lend",
+      "token": "wrap.testnet",
+      "amount": "13000000000000000000000000"
+    },
+    {
+      "kind": "unstake",
+      "amount": "2000000000000000000000000"
+    },
+    {
+      "kind": "swap",
+      "pool_id": 1900,
+      "token_in": "wrap.testnet",
+      "token_out": "usdcc.ft.ref-labs.testnet",
+      "amount_in": "14000000000000000000000000",
+      "min_out": "41790000"
+    },
+    {
+      "kind": "supply",
+      "token": "usdcc.ft.ref-labs.testnet",
+      "amount": "41790000"
+    }
+  ]
+}

@@ -3,4 +3,22 @@ name = "nearly-executor"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "executor"
+path = "src/main.rs"
+
 [dependencies]
+axum = "0.8"
+base64 = "0.22"
+bs58 = "0.5"
+ed25519-dalek = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

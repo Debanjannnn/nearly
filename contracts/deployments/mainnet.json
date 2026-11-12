@@ -1,1 +1,15 @@
-{}
+{
+  "root": "",
+  "factory": "",
+  "treasury": "",
+  "lst_pool": 3515,
+  "tokens": {
+    "usdc": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "wnear": "wrap.near"
+  },
+  "venues": {
+    "lending": "contract.main.burrow.near",
+    "dex": "v2.ref-finance.near",
+    "staking": "linear-protocol.near"
+  }
+}
