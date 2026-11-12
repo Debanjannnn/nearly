@@ -9,7 +9,7 @@ import { Button, ErrorBox, Label, Notice } from "@/components/ui";
 import { Segmented } from "@/components/motion";
 import { showToast } from "@/components/TxToast";
 import { DelegationCard } from "./Delegation";
-import { cn } from "@/lib/utils";
+import { cn, decimalInput } from "@/lib/utils";
 
 const KINDS: Record<Target["type"], ScheduleKind[]> = {
   // token schedules have no backend yet
@@ -117,7 +117,7 @@ export function ScheduleForm({ target, onCreated }: { target: Target; current?: 
       </Field>
       {every === "custom" && (
         <Field label="Custom interval (minutes, min 1)">
-          <input className={inputCls} inputMode="decimal" value={customMin} onChange={(e) => setCustomMin(e.target.value)} />
+          <input className={inputCls} inputMode="decimal" value={customMin} onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setCustomMin(v); }} />
         </Field>
       )}
     </>
@@ -137,7 +137,7 @@ export function ScheduleForm({ target, onCreated }: { target: Target; current?: 
       {kind !== "rebalance" && (
         <>
           <Field label="Buy per run (USDC)">
-            <input className={inputCls} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input className={inputCls} inputMode="decimal" value={amount} onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setAmount(v); }} />
           </Field>
           {intervalPicker("Every")}
         </>
@@ -146,7 +146,7 @@ export function ScheduleForm({ target, onCreated }: { target: Target; current?: 
       {kind === "rebalance" && (
         <>
           <Field label="Drift band (%)" hint="blank = basket rules">
-            <input className={inputCls} inputMode="decimal" value={drift} onChange={(e) => setDrift(e.target.value)} />
+            <input className={inputCls} inputMode="decimal" value={drift} onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setDrift(v); }} />
           </Field>
           {intervalPicker("Check every")}
         </>

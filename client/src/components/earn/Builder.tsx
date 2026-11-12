@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProtocolIcon } from "@/components/ProtocolIcon";
 import { Field, inputCls } from "@/components/automation/ScheduleForm";
 import { evenSplit, setWeight, weightsError } from "./weights";
-import { cn } from "@/lib/utils";
+import { cn, decimalInput } from "@/lib/utils";
 import { BacktestView, pct } from "./Backtest";
 import { fmtAmt, StrategyFlow } from "./StrategyFlow";
 import { RiskCard } from "./RiskCard";
@@ -344,7 +344,7 @@ export function StrategyBuilder() {
                 <Step n={3}>Rules</Step>
               </div>
               <Field label="Drift band (%)" hint="rebalance past this">
-                <input className={inputCls} inputMode="decimal" value={drift} onChange={(e) => setDrift(e.target.value)} />
+                <input className={inputCls} inputMode="decimal" value={drift} onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setDrift(v); }} />
               </Field>
             </div>
           </Panel>
@@ -357,7 +357,7 @@ export function StrategyBuilder() {
               <div className="flex items-center gap-3 px-5 pt-3 pb-5">
                 <input
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setAmount(v); }}
                   inputMode="decimal"
                   placeholder={placeholder}
                   aria-label={`Amount in ${unit}`}
