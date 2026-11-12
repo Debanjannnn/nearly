@@ -65,7 +65,7 @@ func testDB(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// fakeChain: full-access keys, factory accounts and executor keys are plain maps; swaps quote 1:1e18.
+// fakeChain: full-access keys, factory accounts and executor keys are plain maps; swaps quote 1 USDC = 0.1 NEAR.
 type fakeChain struct {
 	mu       sync.Mutex
 	full     map[string]string // account -> full-access public key
@@ -75,7 +75,7 @@ type fakeChain struct {
 }
 
 func (f *fakeChain) Quote(_ context.Context, _ uint64, _, _ string, in *big.Int) (*big.Int, error) {
-	return new(big.Int).Mul(in, big.NewInt(1e12)), nil
+	return new(big.Int).Mul(in, big.NewInt(1e17)), nil // 1 USDC = 0.1 NEAR, near real rate
 }
 func (f *fakeChain) FullAccess(_ context.Context, a, pk string) (bool, error) {
 	f.mu.Lock()
@@ -307,7 +307,7 @@ func TestDeployWithdrawResume(t *testing.T) {
 		t.Fatal(out)
 	}
 	pos := e.position(tok, pid)
-	if pos["state"] != "open" || fmt.Sprint(pos["held"]) != "[498000000 493020000000000000000]" {
+	if pos["state"] != "open" || fmt.Sprint(pos["held"]) != "[498000000 49302000000000000000000000]" {
 		t.Fatal(pos)
 	}
 	x := e.do("GET", "/api/v1/me/executions/"+xid, tok, nil, 200)
@@ -323,7 +323,7 @@ func TestDeployWithdrawResume(t *testing.T) {
 	// partial withdraw 50%
 	e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, map[string]int{"bps": 5000}, 202)
 	e.srv.Wait()
-	if pos := e.position(tok, pid); pos["state"] != "open" || fmt.Sprint(pos["held"]) != "[249000000 246510000000000000000]" {
+	if pos := e.position(tok, pid); pos["state"] != "open" || fmt.Sprint(pos["held"]) != "[249000000 24651000000000000000000000]" {
 		t.Fatal(pos)
 	}
 
@@ -337,7 +337,7 @@ func TestDeployWithdrawResume(t *testing.T) {
 	// resume: lending already withdrawn, staking still there, usdc sits in the account
 	e.exec.failAt = -1
 	e.chain.live = planner.Live{
-		Lent: map[string]string{}, Staked: "246510000000000000000",
+		Lent: map[string]string{}, Staked: "24651000000000000000000000",
 		Wallet: map[string]string{"usdc.t": "249000000", "wrap.t": "0"},
 	}
 	out = e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 202)
@@ -347,7 +347,7 @@ func TestDeployWithdrawResume(t *testing.T) {
 	}
 	// no lst_pool: staked part unstakes (NEAR comes later via claim_unstaked), only usdc to owner
 	if last := e.exec.calls[len(e.exec.calls)-1]; fmt.Sprint(last) != fmt.Sprint([]planner.Step{
-		{Kind: planner.KindUnstake, Amount: "246510000000000000000"},
+		{Kind: planner.KindUnstake, Amount: "24651000000000000000000000"},
 		{Kind: planner.KindToOwner, Token: "usdc.t", Amount: "249000000"},
 	}) {
 		t.Fatalf("resume steps %+v", last)
@@ -377,7 +377,7 @@ func TestWithdrawResumeLSTPool(t *testing.T) {
 	e.srv.Wait()
 	e.exec.failAt = -1
 	e.chain.live = planner.Live{
-		Lent: map[string]string{}, Staked: "493020000000000000000",
+		Lent: map[string]string{}, Staked: "49302000000000000000000000",
 		Wallet: map[string]string{"usdc.t": "498000000", "wrap.t": "0"},
 	}
 	if out := e.do("POST", "/api/v1/me/positions/"+pid+"/withdraw", tok, nil, 202); out["resumed"] != true {
@@ -386,9 +386,9 @@ func TestWithdrawResumeLSTPool(t *testing.T) {
 	e.srv.Wait()
 	// with a pool the swap lands wNEAR now (1% slippage floor), so it goes to the owner too
 	if last := e.exec.calls[len(e.exec.calls)-1]; jsonStr(last) != jsonStr([]planner.Step{
-		{Kind: planner.KindSwap, PoolID: &pool, TokenIn: "lst.t", TokenOut: "wrap.t", AmountIn: "493020000000000000000", MinOut: "488089800000000000000"},
+		{Kind: planner.KindSwap, PoolID: &pool, TokenIn: "lst.t", TokenOut: "wrap.t", AmountIn: "49302000000000000000000000", MinOut: "48808980000000000000000000"},
 		{Kind: planner.KindToOwner, Token: "usdc.t", Amount: "498000000"},
-		{Kind: planner.KindToOwner, Token: "wrap.t", Amount: "488089800000000000000"},
+		{Kind: planner.KindToOwner, Token: "wrap.t", Amount: "48808980000000000000000000"},
 	}) {
 		t.Fatalf("resume steps %+v", last)
 	}
