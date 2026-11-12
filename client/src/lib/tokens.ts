@@ -1,4 +1,4 @@
-import { DEPLOYMENTS, WNEAR_POOL } from "./config";
+import { DEPLOYMENTS, NETWORK, WNEAR_POOL } from "./config";
 
 // address = NEP-141 contract ("near" for the native token); key = deployments token key the api uses
 export type Token = { address: string; symbol: string; name: string; decimals: number; key?: string; icon?: string; color?: string };
@@ -48,6 +48,10 @@ export const MARKETS: MarketDef[] = [
 export const marketOf = (symbol: string) => MARKETS.find((m) => m.symbol.toLowerCase() === symbol.toLowerCase());
 export const pairsOf = (m: MarketDef) => MARKETS.filter((x) => x.token.symbol === m.token.symbol);
 export const LISTED = MARKETS;
+
+// history closes are mainnet (DefiLlama); testnet live prices come from Ref testnet pools, so never mix them
+export const LIVE_MATCHES_HISTORY = NETWORK === "mainnet";
+export const withLive = (closes: number[], live: number | null, same = LIVE_MATCHES_HISTORY) => (same && live !== null && closes.length ? [...closes, live] : closes);
 
 // bigint-safe: rounds down to maxFrac digits, groups thousands
 export function fmtUnits(raw: bigint | string, decimals: number, maxFrac = 4): string {
