@@ -5,7 +5,9 @@ import { errText, fmtUsd } from "@/lib/api";
 import type { Backtest, Sleeve, SourceKind } from "@/lib/types";
 import { symbolOf } from "@/lib/tokens";
 import { ErrorBox, Skeleton, Stat } from "@/components/ui";
-import { defaultVenue, KIND_LABEL, venueName } from "./sources";
+import { defaultVenue, KIND_LABEL, protocolOf, venueName } from "./sources";
+import { ProtocolIcon } from "@/components/ProtocolIcon";
+import { TokenIcon } from "@/components/TokenIcon";
 import { cn } from "@/lib/utils";
 
 const COLORS = ["var(--primary)", "var(--chart-1)", "var(--chart-2)", "var(--warning)", "var(--chart-3)", "var(--chart-4)"];
@@ -14,6 +16,14 @@ export const pct = (s: string | number | null | undefined, d = 2) =>
   s === null || s === undefined || s === "" ? "-" : `${(Number(s) * 100).toFixed(d)}%`;
 
 // "price:wnear" | "apy:lending:usdc" | "apy:staking:wnear"
+// logos for a coverage chip: venue mark (apy only) + token
+function seriesIcons(series: string) {
+  const [t, a, b] = series.split(":");
+  if (t === "price") return { token: symbolOf(a) };
+  if (t === "apy") return { protocol: protocolOf(defaultVenue(a as SourceKind)), token: symbolOf(b) };
+  return {};
+}
+
 function seriesLabel(series: string) {
   const [t, a, b] = series.split(":");
   if (t === "price") return `${symbolOf(a)} price`;
@@ -67,7 +77,8 @@ export function BacktestView({ bt, loading, error }: { bt: Backtest | null; load
               <p className="text-muted-foreground">Window shortened to the data every source has</p>
               <div className="flex flex-wrap gap-2">
                 {clamped.map((c) => (
-                  <span key={c.label} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1">
+                  <span key={c.label} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-2.5 pl-1.5">
+                    <SeriesIcons series={c.series} />
                     {c.label}
                     <span className="text-muted-foreground">
                       {c.first} → {c.last}
@@ -115,5 +126,15 @@ export function AllocationDonut({ sleeves, stacked = false }: { sleeves: Sleeve[
         ))}
       </ul>
     </div>
+  );
+}
+
+function SeriesIcons({ series }: { series: string }) {
+  const { protocol, token } = seriesIcons(series);
+  return (
+    <span className="inline-flex items-center -space-x-1">
+      {protocol && <ProtocolIcon protocol={protocol} size={16} className="ring-2 ring-card" />}
+      {token && <TokenIcon symbol={token} size={16} className="ring-2 ring-card" />}
+    </span>
   );
 }
