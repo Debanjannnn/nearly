@@ -8,6 +8,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Contract tests](https://img.shields.io/badge/contract%20tests-62%20passing-2EA043)
 
 Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. A bot runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
@@ -183,4 +184,4 @@ near-sdk (Rust), near-workspaces, Go, PostgreSQL, Redis, Next.js 16, React 19, `
 
 ## License
 
-[PolyForm Strict 1.0.0](LICENSE)
+[MIT](LICENSE)
