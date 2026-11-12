@@ -4,6 +4,8 @@ use near_sdk::{env, require, AccountId};
 use crate::step::Step;
 use crate::Contract;
 
+const DAY_NS: u64 = 86_400 * 1_000_000_000;
+
 impl Contract {
     pub(crate) fn assert_owner(&self) {
         require!(env::predecessor_account_id() == self.owner, "only owner");
@@ -22,8 +24,8 @@ impl Contract {
         );
     }
 
-    /// `None` token = native NEAR (stake/unstake).
-    pub(crate) fn assert_cap(&self, token: Option<&AccountId>, amount: u128) {
+    /// `None` token = native NEAR (stake/unstake). Also books the amount against the daily limit.
+    pub(crate) fn assert_cap(&mut self, token: Option<&AccountId>, amount: u128) {
         require!(amount > 0, "zero amount");
         let cap = match token {
             Some(t) => *self
@@ -33,9 +35,22 @@ impl Contract {
             None => self.near_cap,
         };
         require!(amount <= cap, "over cap");
+        // fixed UTC-day buckets: worst case 2x the limit across midnight
+        let day = env::block_timestamp() / DAY_NS;
+        let key = token.map_or("near".to_string(), |t| t.to_string());
+        let used = match self.spent.get(&key) {
+            Some(&(d, used)) if d == day => used,
+            _ => 0,
+        };
+        let total = used.saturating_add(amount);
+        require!(
+            total <= cap.saturating_mul(self.daily_steps.into()),
+            "over daily cap"
+        );
+        self.spent.insert(key, (day, total));
     }
 
-    pub(crate) fn check_step(&self, step: &Step) {
+    pub(crate) fn check_step(&mut self, step: &Step) {
         match step {
             Step::Supply { token, amount }
             | Step::WithdrawLend { token, amount }
