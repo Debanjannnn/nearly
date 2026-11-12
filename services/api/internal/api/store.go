@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
+	"github.com/Debanjannnn/nearly/internal/shared/funds"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 )
@@ -218,36 +218,6 @@ func (p Store) Position(ctx context.Context, a, id string) (Position, error) {
 	return one(rows, err, scanPosition)
 }
 
-// HoldHeld sums, per token key, what hold legs of the account's unclosed positions keep in the account wallet.
-func (p Store) HoldHeld(ctx context.Context, a string) (map[string]*big.Int, error) {
-	type row struct {
-		def  planner.Basket
-		held []string
-	}
-	rows, err := p.DB.Query(ctx, `select b.definition, p.held from positions p join baskets b on b.id=p.basket_id
-		where p.account_id=$1 and p.state <> 'closed'`, a)
-	list, err := collect(rows, err, func(r pgx.CollectableRow) (row, error) {
-		var x row
-		return x, r.Scan(&x.def, &x.held)
-	})
-	out := map[string]*big.Int{}
-	for _, x := range list {
-		for i, l := range x.def.Legs {
-			v, ok := new(big.Int), false
-			if l.Source == planner.SourceHold && i < len(x.held) {
-				v, ok = v.SetString(x.held[i], 10)
-			}
-			if ok {
-				if out[l.Token] == nil {
-					out[l.Token] = new(big.Int)
-				}
-				out[l.Token].Add(out[l.Token], v)
-			}
-		}
-	}
-	return out, err
-}
-
 func insertExec(ctx context.Context, tx pgx.Tx, a string, posID, kind string, params ExecParams, steps []planner.Step) (string, error) {
 	var id string
 	if err := tx.QueryRow(ctx, `insert into executions (account_id, position_id, kind, status, params) values ($1,$2,$3,'running',$4) returning id::text`,
@@ -262,9 +232,12 @@ func insertExec(ctx context.Context, tx pgx.Tx, a string, posID, kind string, pa
 	return id, nil
 }
 
-// OpenPosition inserts an opening position and its running deploy execution.
-func (p Store) OpenPosition(ctx context.Context, a, basketID string, params ExecParams, steps []planner.Step) (posID, execID string, err error) {
+// OpenPosition inserts an opening position and its running deploy execution once params.Amount is free.
+func (p Store) OpenPosition(ctx context.Context, a, basketID string, params ExecParams, steps []planner.Step, base func(context.Context) (string, error)) (posID, execID string, err error) {
 	err = pgx.BeginFunc(ctx, p.DB, func(tx pgx.Tx) error {
+		if err := funds.Reserve(ctx, tx, a, params.Amount, base); err != nil {
+			return err
+		}
 		if err := tx.QueryRow(ctx, `insert into positions (account_id, basket_id, deposit) values ($1,$2,$3) returning id::text`,
 			a, basketID, params.Amount).Scan(&posID); err != nil {
 			return err

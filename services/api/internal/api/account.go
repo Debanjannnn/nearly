@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"log/slog"
-	"math/big"
 	"net/http"
 
+	"github.com/Debanjannnn/nearly/internal/shared/funds"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/services/api/internal/auth"
 )
@@ -216,24 +216,6 @@ func (s *Server) free(ctx context.Context, me, sub string) (map[string]string, e
 	if err != nil {
 		return nil, rpc("ft_balance_of", err)
 	}
-	hold, err := s.Store.HoldHeld(ctx, me)
-	return freeOf(bals, hold), err
-}
-
-func freeOf(bals map[string]string, hold map[string]*big.Int) map[string]string {
-	out := map[string]string{}
-	for k, b := range bals {
-		v, ok := new(big.Int).SetString(b, 10)
-		if !ok {
-			v = new(big.Int)
-		}
-		if h := hold[k]; h != nil {
-			v.Sub(v, h)
-		}
-		if v.Sign() < 0 {
-			v.SetInt64(0)
-		}
-		out[k] = v.String()
-	}
-	return out
+	locked, err := funds.Locked(ctx, s.Store.DB, me)
+	return funds.Free(bals, locked), err
 }
