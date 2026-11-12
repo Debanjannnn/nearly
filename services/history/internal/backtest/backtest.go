@@ -11,6 +11,9 @@ import (
 
 const Day = "2006-01-02"
 
+// MinAPYDays: shorter windows report only total return; annualizing them blows up entry costs.
+const MinAPYDays = 30
+
 type Input struct {
 	Basket   planner.Basket
 	Amount   float64 // USD, deposited in the base token
@@ -44,7 +47,8 @@ type Result struct {
 	Coverage      []Coverage         `json:"coverage"`
 	InitialUSD    float64            `json:"initial_usd"`
 	FinalUSD      float64            `json:"final_usd"`
-	APY           float64            `json:"apy"`
+	APY           *float64           `json:"apy"`          // nil when Days < MinAPYDays
+	Return        float64            `json:"total_return"` // final/initial - 1 over the window
 	MaxDrawdown   float64            `json:"max_drawdown"` // 0.2 = -20% peak to trough
 	Rebalances    int                `json:"rebalances"`
 	CostsUSD      float64            `json:"costs_usd"`     // open fee + swaps
@@ -213,10 +217,12 @@ func Run(in Input, s Series) (*Result, error) {
 		res.Curve = append(res.Curve, Point{Day: start.AddDate(0, 0, d).Format(Day), USD: total()})
 	}
 	res.FinalUSD = total()
-	if N > 1 {
-		res.APY = math.Pow(res.FinalUSD/res.InitialUSD, 365/float64(N-1)) - 1
+	res.Return = res.FinalUSD/res.InitialUSD - 1
+	if res.Days >= MinAPYDays {
+		a := math.Pow(res.FinalUSD/res.InitialUSD, 365/float64(res.Days)) - 1
+		res.APY = &a
 	}
-	res.MaxDrawdown = maxDD(res.Curve)
+	res.MaxDrawdown = maxDD(in.Amount, res.Curve)
 	return res, nil
 }
 
@@ -227,8 +233,9 @@ func apyAt(s []float64, d int) float64 {
 	return s[d]
 }
 
-func maxDD(c []Point) float64 {
-	peak, dd := math.Inf(-1), 0.0
+// peak starts at the deposit so entry costs count as drawdown
+func maxDD(initial float64, c []Point) float64 {
+	peak, dd := initial, 0.0
 	for _, p := range c {
 		peak = math.Max(peak, p.USD)
 		dd = math.Max(dd, 1-p.USD/peak)

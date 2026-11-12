@@ -35,6 +35,7 @@ export default function BasketsPage() {
     return Object.fromEntries((list.data ?? []).map((s, i) => [s.id, res[i].status === "fulfilled" ? res[i].value : null]));
   });
   const btOf = (s: Strategy) => bts.data?.[s.id] ?? null;
+  // apyUsd is null under 30d of history, so those baskets never rank
   const topBt = best((s) => btOf(s)?.apyUsd ?? null);
 
   return (
@@ -77,7 +78,7 @@ export default function BasketsPage() {
               ) : list.loading ? (
                 <Skeleton className="h-7 w-full" />
               ) : (
-                <p className="text-sm text-muted-foreground">No baskets yet.</p>
+                <p className="text-sm text-muted-foreground">{list.data?.length ? "Not enough history yet." : "No baskets yet."}</p>
               )}
             </div>
           </article>
