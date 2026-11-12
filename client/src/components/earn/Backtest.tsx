@@ -41,7 +41,11 @@ export function BacktestView({ bt, loading, error }: { bt: Backtest | null; load
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-6 md:grid-cols-3">
-        <Stat label="APY (USD)" value={<span className="text-positive">{pct(bt.apyUsd)}</span>} />
+        {bt.apyUsd !== null ? (
+          <Stat label="APY (USD)" value={<span className={bt.apyUsd < 0 ? "text-destructive" : "text-positive"}>{pct(bt.apyUsd)}</span>} />
+        ) : (
+          <Stat label={`Return (${bt.days}d)`} value={pct(bt.returnUsd)} note="window too short to annualize" />
+        )}
         <Stat label="Max drawdown" value={pct(bt.maxDrawdownUsd)} />
         <Stat label="Final" value={fmtUsd(Number(bt.finalUsd))} note={`from ${fmtUsd(Number(bt.initialUsd))} · ${bt.days}d`} />
       </dl>

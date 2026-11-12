@@ -108,7 +108,8 @@ export type BacktestWire = {
   coverage: { series: string; first: string; last: string; days: number; note?: string }[];
   initial_usd: number;
   final_usd: number;
-  apy: number;
+  apy: number | null; // null when the window is under 30d
+  total_return: number;
   max_drawdown: number;
   rebalances: number;
   costs_usd: number;
@@ -122,7 +123,8 @@ export type Backtest = {
   coverage: { series: string; first: string; last: string; days: number; note?: string }[];
   initialUsd: number;
   finalUsd: number;
-  apyUsd: number;
+  apyUsd: number | null;
+  returnUsd: number;
   maxDrawdownUsd: number;
   rebalances: number;
   costsUsd: number;

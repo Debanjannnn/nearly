@@ -44,6 +44,9 @@ func TestLendingOnlyEarnsAPYMinusFee(t *testing.T) {
 	if want := 996 * 1.10; !near(r.FinalUSD, want, 0.01) {
 		t.Fatalf("final %v want %v", r.FinalUSD, want)
 	}
+	if r.APY == nil || !near(*r.APY, 996*1.10/1000-1, 1e-4) {
+		t.Fatalf("apy %v", r.APY)
+	}
 	if r.MaxDrawdown > 0.0041 || r.CostsUSD != 4 || r.Rebalances != 0 {
 		t.Fatalf("dd %v costs %v reb %d", r.MaxDrawdown, r.CostsUSD, r.Rebalances)
 	}
@@ -91,6 +94,29 @@ func TestPriceDrawdownAndRebalance(t *testing.T) {
 	}
 	if r.Contributions["staking:wnear"] <= 0 {
 		t.Fatal("staking yield missing")
+	}
+}
+
+func TestShortWindowNoAPY(t *testing.T) {
+	// staking series has 2 days: window clamps to 1d, entry costs must not be annualized
+	s := Series{
+		Price: map[string]map[string]float64{"wnear": flat("2025-11-12", 366, func(int) float64 { return 3 })},
+		APY:   map[string]map[string]float64{"staking:wnear": flat("2026-11-11", 2, func(int) float64 { return 0.08 })},
+	}
+	b := planner.Basket{Legs: []planner.Leg{{Token: "wnear", Source: "staking", WeightBps: 10_000}}}
+	r, err := Run(Input{Basket: b, Amount: 1000, From: d("2025-11-12"), To: d("2026-11-12"), SwapBps: 30}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Days != 1 || r.APY != nil {
+		t.Fatalf("days %d apy %v", r.Days, r.APY)
+	}
+	if !near(r.Return, r.FinalUSD/1000-1, 1e-12) || r.Return >= 0 {
+		t.Fatalf("return %v", r.Return)
+	}
+	// entry costs show up as drawdown from the deposit
+	if !near(r.MaxDrawdown, 1-r.Curve[0].USD/1000, 1e-12) || r.MaxDrawdown <= 0 {
+		t.Fatalf("drawdown %v", r.MaxDrawdown)
 	}
 }
 
