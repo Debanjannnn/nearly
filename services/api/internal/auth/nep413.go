@@ -21,17 +21,25 @@ const (
 
 var ErrSignature = errors.New("invalid_signature")
 
-// Verify checks sig (base64) over the NEP-413 payload {Message, nonce, Recipient, no callbackUrl}.
+// Verify checks sig over the NEP-413 payload {Message, nonce, Recipient, no callbackUrl}.
+// sig is base64 (wallets) or "ed25519:<base58>" (near CLI sign-nep413).
 func Verify(publicKey, signature string, nonce []byte) error {
 	pk, err := ParseKey(publicKey)
 	if err != nil || len(nonce) != 32 {
 		return ErrSignature
 	}
-	sig, err := base64.StdEncoding.DecodeString(signature)
+	sig, err := decodeSig(signature)
 	if err != nil || !ed25519.Verify(pk, Hash(Message, Recipient, nonce), sig) {
 		return ErrSignature
 	}
 	return nil
+}
+
+func decodeSig(s string) ([]byte, error) {
+	if raw, ok := strings.CutPrefix(s, "ed25519:"); ok {
+		return base58(raw)
+	}
+	return base64.StdEncoding.DecodeString(s)
 }
 
 // NewNonce is a random 32-byte login challenge.
