@@ -4,6 +4,9 @@ use near_sdk::{env, require, AccountId};
 use crate::step::Step;
 use crate::Contract;
 
+/// Treasury fees per token per 24h, in bps of the 24h limit; matches planner FeeBps.
+const MAX_FEE_BPS: u128 = 40;
+
 impl Contract {
     pub(crate) fn assert_owner(&self) {
         require!(env::predecessor_account_id() == self.owner, "only owner");
@@ -22,8 +25,8 @@ impl Contract {
         );
     }
 
-    /// `None` token = native NEAR (stake/unstake). Also books the amount against the daily limit.
-    pub(crate) fn assert_cap(&mut self, token: Option<&AccountId>, amount: u128) {
+    /// `None` token = native NEAR (stake/unstake). Books the amount, returns the 24h limit.
+    pub(crate) fn assert_cap(&mut self, token: Option<&AccountId>, amount: u128) -> u128 {
         require!(amount > 0, "zero amount");
         let cap = match token {
             Some(t) => *self
@@ -34,15 +37,22 @@ impl Contract {
         };
         require!(amount <= cap, "over cap");
         let key = token.map_or("near".to_string(), |t| t.to_string());
-        self.book_spend(key, amount, cap.saturating_mul(self.daily_steps.into()));
+        let limit = cap.saturating_mul(self.daily_steps.into());
+        self.book_spend(key, amount, limit);
+        limit
     }
 
     pub(crate) fn check_step(&mut self, step: &Step) {
         match step {
             Step::Supply { token, amount }
             | Step::WithdrawLend { token, amount }
-            | Step::Fee { token, amount }
-            | Step::ToOwner { token, amount } => self.assert_cap(Some(token), amount.0),
+            | Step::ToOwner { token, amount } => {
+                self.assert_cap(Some(token), amount.0);
+            }
+            Step::Fee { token, amount } => {
+                let fee_limit = self.assert_cap(Some(token), amount.0) * MAX_FEE_BPS / 10_000;
+                self.book_spend(format!("fee:{token}"), amount.0, fee_limit);
+            }
             Step::Swap {
                 pool_id,
                 token_in,
@@ -60,9 +70,11 @@ impl Contract {
             }
             Step::Stake { token, amount } => {
                 require!(self.caps.contains_key(token), "token not whitelisted");
-                self.assert_cap(None, amount.0)
+                self.assert_cap(None, amount.0);
             }
-            Step::Unstake { amount } => self.assert_cap(None, amount.0),
+            Step::Unstake { amount } => {
+                self.assert_cap(None, amount.0);
+            }
         }
     }
 }
