@@ -169,9 +169,7 @@ export function PriceChart({
 }) {
   const first = points[0]?.o ?? points[0]?.v;
   const last = price ?? points.at(-1)?.v ?? null;
-  // change stays inside the history source; testnet live price is a different market
-  const end = LIVE_MATCHES_HISTORY ? last : (points.at(-1)?.v ?? null);
-  const change = points.length > 0 && first && end ? (end / first - 1) * 100 : null;
+  const change = points.length > 0 && first && last ? (last / first - 1) * 100 : null;
   const down = change !== null && Number(change.toFixed(2)) < 0;
 
   return (
@@ -182,14 +180,14 @@ export function PriceChart({
             {last !== null ? <Flash value={last}>{fmtUsd(last)}</Flash> : loading ? <Skeleton className="h-12 w-48" /> : "-"}
           </div>
           <div className="mt-2 text-sm">
-            {change !== null && first && end ? (
+            {change !== null && first && last ? (
               <span className="inline-flex items-center gap-1.5">
                 <ChangeText value={change} className="gap-1.5" />
                 <span className={cn("font-mono", down ? "text-destructive" : "text-positive")}>
-                  ({end - first >= 0 ? "+" : "-"}
-                  {fmtUsd(Math.abs(end - first))}) {range}
+                  ({last - first >= 0 ? "+" : "-"}
+                  {fmtUsd(Math.abs(last - first))}) {range}
                 </span>
-                {!LIVE_MATCHES_HISTORY && <span className="text-muted-foreground">· mainnet closes</span>}
+                {!LIVE_MATCHES_HISTORY && <span className="text-muted-foreground">· mainnet price history, scaled to testnet price</span>}
               </span>
             ) : (
               <span className="text-muted-foreground">{caption}</span>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fmtUnits, parseAmount, withLive } from "./tokens";
+import { anchor, fmtUnits, parseAmount, withLive } from "./tokens";
 
 assert.equal(fmtUnits(0n, 6), "0");
 assert.equal(fmtUnits(1_234_567_890n, 6), "1,234.5678");
@@ -21,5 +21,12 @@ assert.deepEqual(withLive([3.58, 3.59], 13.91, true), [3.58, 3.59, 13.91]);
 assert.deepEqual(withLive([3.58, 3.59], 13.91, false), [3.58, 3.59]);
 assert.deepEqual(withLive([3.58], null, true), [3.58]);
 assert.deepEqual(withLive([], 13.91, true), []);
+
+// testnet: every bar field scaled so the last close hits live; t/vol untouched
+assert.deepEqual(anchor([{ t: 1, o: 1, h: 4, l: 1, v: 2, vol: 9 }, { t: 2, v: 4 }], 8, false), [{ t: 1, o: 2, h: 8, l: 2, v: 4, vol: 9 }, { t: 2, v: 8 }]);
+const bars = [{ t: 1, v: 2 }];
+assert.equal(anchor(bars, 8, true), bars);
+assert.equal(anchor(bars, null, false), bars);
+assert.deepEqual(anchor([], 8, false), []);
 
 console.log("tokens ok");

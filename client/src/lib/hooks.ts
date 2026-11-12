@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getExecution, getHoldings, getPriceSeries, getPrices, getRates } from "./api";
 import { useAsync, useSession } from "./session";
-import { MARKETS, withLive } from "./tokens";
+import { anchor, MARKETS, withLive } from "./tokens";
 import { useTopic } from "./ws";
 import type { Execution, PricePoint, Prices, Rates } from "./types";
 
@@ -44,8 +44,8 @@ export function useTickers() {
   const out: Record<string, Ticker> = {};
   for (const m of MARKETS) {
     const pts = (m.history && hist.data?.[m.history]) || [];
-    const closes = pts.map((p) => p.v);
     const live = prices.priceOf(m.swap.address);
+    const closes = anchor(pts, live).map((p) => p.v);
     const price = live ?? closes.at(-1) ?? null;
     // 24h: last point vs the one before (live joins only when it shares the closes' source)
     const series = withLive(closes, live);
