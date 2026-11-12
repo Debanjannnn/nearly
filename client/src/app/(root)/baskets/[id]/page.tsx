@@ -8,7 +8,7 @@ import { dayOf, toPoints, useRates, useTickers } from "@/lib/hooks";
 import { useAsync, useSession } from "@/lib/session";
 import { addressUrl } from "@/lib/config";
 import { Button, Card, Detail, ErrorBox, Panel, Skeleton, Stat } from "@/components/ui";
-import { marketOf } from "@/lib/tokens";
+import { anchor, marketOf } from "@/lib/tokens";
 import { PriceChart, RANGES, type Range } from "@/components/chart/PriceChart";
 import { IconStack } from "@/components/IconStack";
 import { AllocationDonut, BacktestView, pct } from "@/components/earn/Backtest";
@@ -43,19 +43,12 @@ export default function BasketPage() {
   const [mode, setMode] = useState<"line" | "candle">("candle");
   const { ms } = RANGES[range];
   // aggregated chart: each token's daily closes weighted into one $100 index (USDC flat)
-  const series = useAsync(s ? `bidx:${id}:${range}` : null, async () =>
-    basketCandles(
-      await Promise.all(
-        sleeves.map(async (sl) => ({
-          weightBps: sl.weightBps,
-          points: sl.asset === "USDC" ? null : toPoints(await getPriceSeries(marketOf(sl.asset)!.history!, ms === null ? "2000-01-01" : dayOf(Date.now() - ms))),
-        })),
-      ),
-    ),
+  const series = useAsync(s ? `bidx:${id}:${range}` : null, () =>
+    Promise.all(sleeves.map(async (sl) => (sl.asset === "USDC" ? null : toPoints(await getPriceSeries(marketOf(sl.asset)!.history!, ms === null ? "2000-01-01" : dayOf(Date.now() - ms)))))),
   );
-  const pts = series.data ?? [];
   // headline: live price = Σ weight × token price (USDC $1); last close until every token has a price
   const { tickers } = useTickers();
+  const pts = series.data ? basketCandles(sleeves.map((sl, i) => ({ weightBps: sl.weightBps, points: series.data![i] && anchor(series.data![i]!, tickers[sl.asset]?.price ?? null) }))) : [];
   const mids = sleeves.map((sl) => (sl.asset === "USDC" ? 1 : (tickers[sl.asset]?.price ?? null)));
   const livePx = s && mids.every((m) => m !== null) ? sleeves.reduce((a, sl, i) => a + (sl.weightBps / 10000) * mids[i]!, 0) : null;
   // split per $1,000: every source as a share of the whole basket

@@ -7,7 +7,7 @@ import { motion } from "motion/react";
 import { fmtNum, fmtUsd } from "@/lib/api";
 import { addressUrl, NETWORK } from "@/lib/config";
 import { usePrices, useHoldings, useSeries, useTickers } from "@/lib/hooks";
-import { marketOf, pairsOf } from "@/lib/tokens";
+import { anchor, marketOf, pairsOf } from "@/lib/tokens";
 import { Button, Card, Detail, Notice, Panel, Stat } from "@/components/ui";
 import { TokenIcon } from "@/components/TokenIcon";
 import { PriceChart, RANGES, type Range } from "@/components/chart/PriceChart";
@@ -46,7 +46,7 @@ export default function TradePage() {
   const t = market.token;
   const tk = tickers[market.symbol];
   const price = tk?.price ?? chart.points.at(-1)?.v ?? null;
-  const points = chart.points;
+  const points = anchor(chart.points, tk?.price ?? null);
   // history is daily: 24h range = yesterday's close vs now
   const day = tk?.series.slice(-2) ?? [];
   const held = holdings.data?.tokens.find((x) => x.symbol === t.symbol);

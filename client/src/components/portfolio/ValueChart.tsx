@@ -118,7 +118,7 @@ export function ValueChart({ legs, flat, total, loading }: { legs: { market: str
           </ResponsiveContainer>
         )}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">Your current holdings valued at past daily closes{LIVE_MATCHES_HISTORY ? "; the last point is live." : " (mainnet closes; change excludes testnet live prices)."}</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">Your current holdings valued at past daily closes{LIVE_MATCHES_HISTORY ? "; the last point is live." : " (mainnet price history, scaled to testnet price)."}</p>
     </Panel>
   );
 }
