@@ -1,5 +1,3 @@
-![Nearly: The Yield Bearing Basket, live on NEAR](docs/banner.png)
-
 # Nearly
 
 ![NEAR](https://img.shields.io/badge/NEAR-testnet-000000?logo=near&logoColor=white)
@@ -14,6 +12,9 @@
 ![Contract tests](https://img.shields.io/badge/contract%20tests-69%20passing-2EA043)
 
 Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. A bot runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
+
+![Nearly: The Yield Bearing Basket, live on NEAR](docs/banner.png)
+
 
 Built at NEAR HACKATHON (2026-11-01 → 2026-11-14). Tracks: **`defi`** and **`security`**.
 
