@@ -1,3 +1,5 @@
+![Nearly: The Yield Bearing Basket, live on NEAR](docs/banner.png)
+
 # Nearly
 
 ![NEAR](https://img.shields.io/badge/NEAR-testnet-000000?logo=near&logoColor=white)
