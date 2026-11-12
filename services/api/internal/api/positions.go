@@ -32,6 +32,16 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		b, err = s.Store.Basket(ctx, bid, me)
 	}
+	var bals map[string]string
+	if err == nil {
+		bals, err = s.free(ctx, me, sub)
+	}
+	if err == nil {
+		amt, _ := new(big.Int).SetString(in.Amount, 10)
+		if have, ok := new(big.Int).SetString(bals[planner.Base], 10); !ok || amt.Cmp(have) > 0 {
+			err = ErrInsufficient // other positions' hold legs are not spendable
+		}
+	}
 	var plan planner.Plan
 	if err == nil {
 		plan, err = s.Plan.Deploy(ctx, b.Definition, in.Amount)

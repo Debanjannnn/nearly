@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"math/big"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -71,5 +72,12 @@ func TestFailStatus(t *testing.T) {
 		if w.Code != want {
 			t.Errorf("%v: %d want %d", err, w.Code, want)
 		}
+	}
+}
+
+func TestFreeOf(t *testing.T) {
+	got := freeOf(map[string]string{"usdc": "100", "wnear": "5", "x": "bad"}, map[string]*big.Int{"usdc": big.NewInt(30), "wnear": big.NewInt(9)})
+	if got["usdc"] != "70" || got["wnear"] != "0" || got["x"] != "0" {
+		t.Fatal(got)
 	}
 }
