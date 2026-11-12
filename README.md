@@ -9,7 +9,7 @@
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
-![Contract tests](https://img.shields.io/badge/contract%20tests-69%20passing-2EA043)
+![Contract tests](https://img.shields.io/badge/contract%20tests-71%20passing-2EA043)
 
 Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. A bot runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
 
@@ -24,7 +24,7 @@ No Docker or secrets needed for these:
 
 ```sh
 scripts/verify-testnet.sh    # every deployed account exists and has code
-make contracts-test          # 69 contract tests: policy, caps, pools, 24h limit, revoke, migrate, sandbox runs
+make contracts-test          # 71 contract tests: policy, caps, pools, 24h limit, fee budget, revoke, migrate, sandbox runs
 ```
 
 | Track | What to look at |
@@ -50,12 +50,13 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 |---|---|---|
 | sends funds to their own account | ❌ impossible: no step type has a receiver field | `contracts/account/src/step.rs:4` |
 | calls any other method (`withdraw`, `set_*`, …) | ❌ the key only allows `execute_step` | `contracts/factory/src/lib.rs:108` |
-| moves a non-whitelisted token | ❌ rejected | `contracts/account/src/policy.rs:26` |
-| swaps through an attacker's pool | ❌ `pool not whitelisted`; swaps also need `min_out` > 0 | `contracts/account/src/policy.rs:54` |
-| moves more than the cap in one step | ❌ `over cap` | `contracts/account/src/policy.rs:26` |
+| moves a non-whitelisted token | ❌ rejected | `contracts/account/src/policy.rs:29` |
+| swaps through an attacker's pool | ❌ `pool not whitelisted`; swaps also need `min_out` > 0 | `contracts/account/src/policy.rs:64` |
+| moves more than the cap in one step | ❌ `over cap` | `contracts/account/src/policy.rs:29` |
 | repeats steps to drain over time | ❌ `over daily cap`: at most `daily_steps` × cap per token in **any** 24 hours (default 10), and at most 64 steps | `contracts/account/src/limit.rs:12` |
 | keeps acting after you notice | ❌ `revoke_executor` deletes the key; later calls fail with `executor revoked` | `contracts/account/src/owner.rs:109` |
-| accepts a poor price on a whitelisted pool, or pays treasury fees | ⚠️ possible, but only within the per-step and 24h limits (see Known limits) | — |
+| pays itself through treasury fees | ❌ fees are capped at 0.4% of the token's 24h limit, a constant nobody can raise | `contracts/account/src/policy.rs:54` |
+| accepts a poor price on a whitelisted pool | ⚠️ price slippage on whitelisted pools, bounded by the per-step and 24h caps (see Known limits) | — |
 
 ## How NEAR is used
 
@@ -63,7 +64,7 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 |---|---|---|
 | Sub-accounts + factory | `contracts/factory/src/lib.rs:72` `create_account` | Each user gets their own on-chain account; there's no shared vault |
 | Function-call access keys | `contracts/factory/src/lib.rs:108` `add_access_key_allowance(…, "execute_step")` | The bot can call one method, with capped gas |
-| On-chain policy engine | `contracts/account/src/policy.rs:13` `assert_executor`, `:26` `assert_cap`, `:40` `check_step`; `limit.rs:12` rolling 24h window | Limits are enforced by the contract, not the server |
+| On-chain policy engine | `contracts/account/src/policy.rs:16` `assert_executor`, `:29` `assert_cap`, `:45` `check_step`; `limit.rs:12` rolling 24h window | Limits are enforced by the contract, not the server |
 | No-receiver step type | `contracts/account/src/step.rs:4` | Fund destinations are fixed in code |
 | Owner controls | `contracts/account/src/owner.rs:94` `set_daily_steps`, `:102` `set_pools`, `:109` `revoke_executor` | The owner sets the limits and pools, and can remove the bot's key in one call |
 | NEAR Intents 1Click | `internal/shared/intents/`, `services/api/internal/api/intents.go` | Deposit from or withdraw to other chains |
@@ -158,11 +159,12 @@ Every claim maps to a test you can run:
 
 | Claim | Test (`contracts/account/src/tests.rs`) |
 |---|---|
-| No step can send funds to an arbitrary account | `no_step_can_name_a_receiver` (line 413) |
+| No step can send funds to an arbitrary account | `no_step_can_name_a_receiver` (line 440) |
 | Only the bot's key, signing on the account itself, can run steps | `executor_must_be_self`, `executor_wrong_key` (line 179) |
 | Steps over the cap are rejected | `over_cap_rejected` (line 190), `stake_over_near_cap_rejected` |
 | Repeated steps stop at the 24h limit, measured as a rolling window, not calendar days | `over_daily_cap_rejected` (line 310), `daily_cap_is_rolling_not_calendar` (line 342), `daily_cap_resets_next_day`, `spend_log_is_bounded` |
 | Swaps only through whitelisted pools, never with `min_out` of 0 | `swap_on_unknown_pool_rejected` (line 376), `swap_without_min_out_rejected` (line 384) |
+| Treasury fees stay within 0.4% of the 24h limit | `fees_over_budget_rejected` (line 415), `fee_budget_scales_with_daily_steps` |
 | Only the owner can change the limit or the pools | `daily_steps_only_owner`, `pools_only_owner` |
 | Non-whitelisted tokens are rejected | `non_whitelisted_token_rejected`, `swap_to_non_whitelisted_rejected` |
 | Revoke works and only the owner can do it | `revoked_executor_rejected` (line 248), `revoke_only_owner` |
@@ -170,7 +172,7 @@ Every claim maps to a test you can run:
 | Contract against real venue contracts | `contracts/factory/tests/sandbox.rs`, `contracts/factory/tests/venues.rs` (near-workspaces sandbox) |
 
 ```sh
-make contracts-test   # 69 contract tests: 54 account, 9 factory, 6 sandbox
+make contracts-test   # 71 contract tests: 56 account, 9 factory, 6 sandbox
 go test ./...         # Go services and shared packages
 cd executor && cargo test
 ```

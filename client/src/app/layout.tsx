@@ -4,7 +4,7 @@ import "./globals.css";
 import { SessionProvider } from "@/lib/session";
 import { Toaster } from "sonner";
 import { MotionRoot } from "@/components/motion";
-import { DESCRIPTION, OPEN_GRAPH, SITE_URL, TITLE } from "@/lib/site";
+import { DESCRIPTION, OG_IMAGE, OPEN_GRAPH, SITE_URL, TITLE } from "@/lib/site";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   applicationName: "nearly",
   keywords: ["nearly", "NEAR", "yield basket", "DeFi", "self custodial", "Rhea", "LiNEAR", "NEAR Intents", "lending", "staking", "DCA"],
   openGraph: OPEN_GRAPH,
-  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: [OG_IMAGE] },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large" } },
 };
 
