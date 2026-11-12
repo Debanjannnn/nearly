@@ -71,21 +71,21 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 
 ```mermaid
 flowchart TD
-  U([👤 User · NEAR wallet])
-  U -->|NEP-413 sign-in| C[🖥️ client · Next.js]
-  U -->|signs create_account| F[🏭 factory contract]
-  C --> API[⚙️ api · Go]
-  API --> S[⏱️ scheduler · Go]
-  API --> M[📈 market-data + history · Go]
-  API <-->|any-chain in/out| I[🌉 NEAR Intents 1Click]
-  S --> X[🔑 executor · Rust<br/>function-call key]
-  F -->|deploys + adds bot key| A[🔒 your account contract<br/>whitelist · caps · daily limit]
+  U([User · NEAR wallet])
+  U -->|NEP-413 sign-in| C[client · Next.js]
+  U -->|signs create_account| F[factory contract]
+  C --> API[api · Go]
+  API --> S[⏱scheduler · Go]
+  API --> M[market-data + history · Go]
+  API <-->|any-chain in/out| I[NEAR Intents 1Click]
+  S --> X[executor · Rust<br/>function-call key]
+  F -->|deploys + adds bot key| A[your account contract<br/>whitelist · caps · daily limit]
   X -->|execute_step only| A
   A --> L[(Rhea lending)]
   A --> D[(Rhea DEX)]
   A --> ST[(LiNEAR staking)]
   A --> T[(treasury fee)]
-  A -.->|events| IX[🗂️ indexer · Go]
+  A -.->|events| IX[indexer · Go]
   IX --> DB[(PostgreSQL)]
 ```
 
