@@ -11,5 +11,9 @@
     "lending": "contract.main.burrow.near",
     "dex": "v2.ref-finance.near",
     "staking": "linear-protocol.near"
-  }
+  },
+  "pools": [
+    4512,
+    3515
+  ]
 }

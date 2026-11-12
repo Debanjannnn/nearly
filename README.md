@@ -9,7 +9,7 @@
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
-![Contract tests](https://img.shields.io/badge/contract%20tests-62%20passing-2EA043)
+![Contract tests](https://img.shields.io/badge/contract%20tests-69%20passing-2EA043)
 
 Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. A bot runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
 
@@ -21,13 +21,13 @@ No Docker or secrets needed for these:
 
 ```sh
 scripts/verify-testnet.sh    # every deployed account exists and has code
-make contracts-test          # 62 contract tests: policy, caps, daily limit, revoke, sandbox runs
+make contracts-test          # 69 contract tests: policy, caps, pools, 24h limit, revoke, migrate, sandbox runs
 ```
 
 | Track | What to look at |
 |---|---|
 | `defi` | Baskets across Rhea lending, the Rhea DEX and liquid staking; backtests; deposit and withdraw from any chain via NEAR Intents 1Click |
-| `security` | The bot holds a function-call key limited to `execute_step`, and the contract checks each step: token whitelist, per-step cap, **daily limit**, no free-form receiver, owner kill switch |
+| `security` | The bot holds a function-call key limited to `execute_step`, and the contract checks each step: token and pool whitelists, per-step cap, **rolling 24h limit**, no free-form receiver, owner kill switch |
 
 ## The problem
 
@@ -37,7 +37,7 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 
 - **One account per user.** The factory creates `alice-testnet.factory.nearly-dev-c7dc68.testnet` (for `alice.testnet`), a contract account that only you own.
 - **The bot gets a function-call key, not your keys.** That key can call exactly one method, `execute_step`, with a limited gas allowance.
-- **The contract checks every step.** A step can only move whitelisted tokens into Rhea lending, the Rhea DEX, liquid staking, the treasury fee, or back to you. Each step has a cap, and each token has a daily limit. No step can name an arbitrary receiver.
+- **The contract checks every step.** A step can only move whitelisted tokens into Rhea lending, whitelisted Rhea DEX pools, liquid staking, the treasury fee, or back to you. Each step has a cap, each token has a rolling 24-hour limit, and swaps need a nonzero `min_out`. No step can name an arbitrary receiver.
 - **You can switch the bot off at any time.** `revoke_executor` deletes its key on chain.
 - **Deposit or withdraw from any chain** through NEAR Intents 1Click.
 
@@ -46,22 +46,23 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 | An attacker with the bot's key… | Result | Enforced at |
 |---|---|---|
 | sends funds to their own account | ❌ impossible: no step type has a receiver field | `contracts/account/src/step.rs:4` |
-| calls any other method (`withdraw`, `set_*`, …) | ❌ the key only allows `execute_step` | `contracts/factory/src/lib.rs:104` |
-| moves a non-whitelisted token | ❌ rejected | `contracts/account/src/policy.rs:28` |
-| moves more than the cap in one step | ❌ `over cap` | `contracts/account/src/policy.rs:28` |
-| repeats steps to drain over time | ❌ `over daily cap`: at most `daily_steps` × cap per token per UTC day (default 10) | `contracts/account/src/policy.rs:28` |
-| keeps acting after you notice | ❌ `revoke_executor` deletes the key; later calls fail with `executor revoked` | `contracts/account/src/owner.rs:102` |
-| spends daily-limited value through bad swaps or fees | ⚠️ possible, within the limits above (see Known limits) | — |
+| calls any other method (`withdraw`, `set_*`, …) | ❌ the key only allows `execute_step` | `contracts/factory/src/lib.rs:108` |
+| moves a non-whitelisted token | ❌ rejected | `contracts/account/src/policy.rs:26` |
+| swaps through an attacker's pool | ❌ `pool not whitelisted`; swaps also need `min_out` > 0 | `contracts/account/src/policy.rs:54` |
+| moves more than the cap in one step | ❌ `over cap` | `contracts/account/src/policy.rs:26` |
+| repeats steps to drain over time | ❌ `over daily cap`: at most `daily_steps` × cap per token in **any** 24 hours (default 10), and at most 64 steps | `contracts/account/src/limit.rs:12` |
+| keeps acting after you notice | ❌ `revoke_executor` deletes the key; later calls fail with `executor revoked` | `contracts/account/src/owner.rs:109` |
+| accepts a poor price on a whitelisted pool, or pays treasury fees | ⚠️ possible, but only within the per-step and 24h limits (see Known limits) | — |
 
 ## How NEAR is used
 
 | NEAR feature | Where | Why it matters |
 |---|---|---|
-| Sub-accounts + factory | `contracts/factory/src/lib.rs:69` `create_account` | Each user gets their own on-chain account; there's no shared vault |
-| Function-call access keys | `contracts/factory/src/lib.rs:104` `add_access_key_allowance(…, "execute_step")` | The bot can call one method, with capped gas |
-| On-chain policy engine | `contracts/account/src/policy.rs:15` `assert_executor`, `:28` `assert_cap`, `:53` `check_step` | Limits are enforced by the contract, not the server |
+| Sub-accounts + factory | `contracts/factory/src/lib.rs:72` `create_account` | Each user gets their own on-chain account; there's no shared vault |
+| Function-call access keys | `contracts/factory/src/lib.rs:108` `add_access_key_allowance(…, "execute_step")` | The bot can call one method, with capped gas |
+| On-chain policy engine | `contracts/account/src/policy.rs:13` `assert_executor`, `:26` `assert_cap`, `:40` `check_step`; `limit.rs:12` rolling 24h window | Limits are enforced by the contract, not the server |
 | No-receiver step type | `contracts/account/src/step.rs:4` | Fund destinations are fixed in code |
-| Owner controls | `contracts/account/src/owner.rs:94` `set_daily_steps`, `:102` `revoke_executor` | The owner sets the daily limit and can remove the bot's key in one call |
+| Owner controls | `contracts/account/src/owner.rs:94` `set_daily_steps`, `:102` `set_pools`, `:109` `revoke_executor` | The owner sets the limits and pools, and can remove the bot's key in one call |
 | NEAR Intents 1Click | `internal/shared/intents/`, `services/api/internal/api/intents.go` | Deposit from or withdraw to other chains |
 | Rhea lending + DEX, liquid staking | `contracts/deployments/testnet.json` | Where the yield comes from |
 | NEP-413 sign-in | `services/api/internal/auth/` | Wallet login without passwords |
@@ -79,7 +80,7 @@ flowchart TD
   API --> M[market-data + history · Go]
   API <-->|any-chain in/out| I[NEAR Intents 1Click]
   S --> X[executor · Rust<br/>function-call key]
-  F -->|deploys + adds bot key| A[your account contract<br/>whitelist · caps · daily limit]
+  F -->|deploys + adds bot key| A[your account contract<br/>token + pool whitelist · caps · 24h limit]
   X -->|execute_step only| A
   A --> L[(Rhea lending)]
   A --> D[(Rhea DEX)]
@@ -154,18 +155,19 @@ Every claim maps to a test you can run:
 
 | Claim | Test (`contracts/account/src/tests.rs`) |
 |---|---|
-| No step can send funds to an arbitrary account | `no_step_can_name_a_receiver` (line 342) |
-| Only the bot's key, signing on the account itself, can run steps | `executor_must_be_self`, `executor_wrong_key` (line 178) |
-| Steps over the cap are rejected | `over_cap_rejected` (line 189), `stake_over_near_cap_rejected` |
-| Repeated steps stop at the daily limit, which resets the next day | `over_daily_cap_rejected` (line 305), `daily_cap_resets_next_day` (line 316) |
-| Only the owner can change the daily limit | `daily_steps_only_owner` |
+| No step can send funds to an arbitrary account | `no_step_can_name_a_receiver` (line 413) |
+| Only the bot's key, signing on the account itself, can run steps | `executor_must_be_self`, `executor_wrong_key` (line 179) |
+| Steps over the cap are rejected | `over_cap_rejected` (line 190), `stake_over_near_cap_rejected` |
+| Repeated steps stop at the 24h limit, measured as a rolling window, not calendar days | `over_daily_cap_rejected` (line 310), `daily_cap_is_rolling_not_calendar` (line 342), `daily_cap_resets_next_day`, `spend_log_is_bounded` |
+| Swaps only through whitelisted pools, never with `min_out` of 0 | `swap_on_unknown_pool_rejected` (line 376), `swap_without_min_out_rejected` (line 384) |
+| Only the owner can change the limit or the pools | `daily_steps_only_owner`, `pools_only_owner` |
 | Non-whitelisted tokens are rejected | `non_whitelisted_token_rejected`, `swap_to_non_whitelisted_rejected` |
-| Revoke works and only the owner can do it | `revoked_executor_rejected` (line 247), `revoke_only_owner` |
+| Revoke works and only the owner can do it | `revoked_executor_rejected` (line 248), `revoke_only_owner` |
 | Failed venue calls refund and book nothing | `failed_transfer_is_refunded`, `failed_swap_refunds_and_books_nothing` |
 | Contract against real venue contracts | `contracts/factory/tests/sandbox.rs`, `contracts/factory/tests/venues.rs` (near-workspaces sandbox) |
 
 ```sh
-make contracts-test   # 62 contract tests: 48 account, 8 factory, 6 sandbox
+make contracts-test   # 69 contract tests: 54 account, 9 factory, 6 sandbox
 go test ./...         # Go services and shared packages
 cd executor && cargo test
 ```
@@ -174,8 +176,7 @@ CI (`.github/workflows/ci.yml`) runs Go vet + tests (unit and integration), exec
 
 ## Known limits
 
-- The daily limit uses fixed UTC days, so up to 2× the limit can move across midnight.
-- The contract doesn't restrict which DEX pool a swap uses; the executor enforces `min_out` off chain. A compromised bot could take bad swap prices, but only within the per-step and daily limits.
+- The bot sets each swap's `min_out` from a live quote. A compromised bot could accept a worse price on a whitelisted pool, but only within the per-step and 24h limits.
 - NEAR Intents has no testnet, so live cross-chain transfers are mainnet-only. On testnet you get dry-run quotes.
 - Perps and limit orders are out of scope.
 

@@ -7,6 +7,7 @@ use near_sdk::{
     PromiseError, PublicKey,
 };
 
+mod migrate;
 mod name;
 
 /// No upgrade path: accounts get no full-access key, so their code is fixed at creation.
@@ -37,6 +38,8 @@ pub struct AccountConfig {
     pub venues: Venues,
     pub tokens: Vec<(AccountId, U128)>,
     pub near_cap: U128,
+    /// Rhea pool ids swaps may use
+    pub pools: Vec<u64>,
 }
 
 #[near(contract_state)]
@@ -87,6 +90,7 @@ impl Factory {
             "venues": c.venues,
             "tokens": c.tokens,
             "near_cap": c.near_cap,
+            "pools": c.pools,
         });
         if let Some(excess) = deposit.checked_sub(need).filter(|e| !e.is_zero()) {
             Promise::new(payer.clone()).transfer(excess).detach();

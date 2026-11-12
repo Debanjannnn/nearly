@@ -76,6 +76,7 @@ async fn setup() -> anyhow::Result<Env> {
             "venues": {"lending": lending.id(), "dex": dex.id(), "staking": staking.id()},
             "tokens": [[usdc.id(), "10000"], [wnear.id(), "10000"]],
             "near_cap": (5 * NEAR).to_string(),
+            "pools": [1, 3515],
         }}))
         .transact()
         .await?
@@ -256,10 +257,7 @@ async fn stake_unstake_matches_venue() -> anyhow::Result<()> {
     e.fund_wnear(2 * NEAR).await?;
     e.step(e.stake(2 * NEAR)).await?;
     assert_eq!(e.ledger("get_positions", "staking").await?, 2 * NEAR);
-    assert_eq!(
-        e.ledger("get_balances", e.wnear.id().as_ref()).await?,
-        0
-    );
+    assert_eq!(e.ledger("get_balances", e.wnear.id().as_ref()).await?, 0);
     assert_eq!(staked().await?, 2 * NEAR);
 
     e.step(json!({"kind": "unstake", "amount": (NEAR / 2).to_string()}))
