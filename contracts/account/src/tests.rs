@@ -154,11 +154,11 @@ fn executor_fee_and_to_owner() {
     as_executor();
     c.execute_step(Step::Fee {
         token: acc(USDC),
-        amount: U128(100),
+        amount: U128(40),
     });
     c.execute_step(Step::ToOwner {
         token: acc(USDC),
-        amount: U128(900),
+        amount: U128(960),
     });
     assert_eq!(bal(&c, USDC), 1_000);
 }
@@ -298,8 +298,8 @@ fn executor_on_day(day: u64) {
     executor_at_hour(day * 24);
 }
 
-fn fee(c: &mut Contract, amount: u128) {
-    c.execute_step(Step::Fee {
+fn to_owner(c: &mut Contract, amount: u128) {
+    c.execute_step(Step::ToOwner {
         token: acc(USDC),
         amount: U128(amount),
     });
@@ -312,9 +312,9 @@ fn over_daily_cap_rejected() {
     set("alice.testnet", other_pk(), 1);
     c.set_daily_steps(2);
     executor_on_day(1);
-    fee(&mut c, 1_000);
-    fee(&mut c, 1_000);
-    fee(&mut c, 1);
+    to_owner(&mut c, 1_000);
+    to_owner(&mut c, 1_000);
+    to_owner(&mut c, 1);
 }
 
 #[test]
@@ -323,9 +323,9 @@ fn daily_cap_resets_next_day() {
     set("alice.testnet", other_pk(), 1);
     c.set_daily_steps(1);
     executor_on_day(1);
-    fee(&mut c, 1_000);
+    to_owner(&mut c, 1_000);
     executor_on_day(2);
-    fee(&mut c, 1_000);
+    to_owner(&mut c, 1_000);
     assert_eq!(bal(&c, USDC), 0);
 }
 
@@ -344,9 +344,9 @@ fn daily_cap_is_rolling_not_calendar() {
     set("alice.testnet", other_pk(), 1);
     c.set_daily_steps(1);
     executor_at_hour(23);
-    fee(&mut c, 1_000);
+    to_owner(&mut c, 1_000);
     executor_at_hour(25);
-    fee(&mut c, 1);
+    to_owner(&mut c, 1);
 }
 
 #[test]
@@ -357,7 +357,7 @@ fn spend_log_is_bounded() {
     c.set_daily_steps(1_000);
     for _ in 0..=crate::limit::MAX_SPENDS {
         as_executor();
-        fee(&mut c, 1);
+        to_owner(&mut c, 1);
     }
 }
 
@@ -401,6 +401,33 @@ fn pools_only_owner() {
     let mut c = setup();
     set("mallory.testnet", other_pk(), 1);
     c.set_pools(vec![666]);
+}
+
+fn fee(c: &mut Contract, amount: u128) {
+    c.execute_step(Step::Fee {
+        token: acc(USDC),
+        amount: U128(amount),
+    });
+}
+
+#[test]
+#[should_panic(expected = "over daily cap")]
+fn fees_over_budget_rejected() {
+    let mut c = setup();
+    as_executor();
+    fee(&mut c, 40);
+    as_executor();
+    fee(&mut c, 1);
+}
+
+#[test]
+fn fee_budget_scales_with_daily_steps() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.set_daily_steps(20);
+    as_executor();
+    fee(&mut c, 80);
+    assert_eq!(bal(&c, USDC), 1_920);
 }
 
 #[test]
