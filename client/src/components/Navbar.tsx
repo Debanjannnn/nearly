@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Check, Copy, Menu, Wallet as WalletIcon } from "lucide-react";
 import { fmtNum, shortHash } from "@/lib/api";
 import { addressUrl, NETWORK } from "@/lib/config";
@@ -14,6 +14,8 @@ import { BasketSearch } from "./BasketSearch";
 import { Row, Spinner, useDismissable } from "./ui";
 import { AnyChainButton } from "@/components/deposit/AnyChainDeposit";
 import { AnyChainWithdrawButton } from "@/components/deposit/AnyChainWithdraw";
+
+const noop = () => () => {};
 
 const NAV = [
   { label: "Trade", href: "/" },
@@ -27,6 +29,8 @@ export function Navbar() {
   const { ready, authenticated, address, login, pending } = useSession();
   const { open: menuOpen, setOpen: setMenuOpen, ref: menuRef } = useDismissable();
   const [scrolled, setScrolled] = useState(false);
+  // false during SSR + hydration: session lives in localStorage/wallet, so match the server spinner
+  const hydrated = useSyncExternalStore(noop, () => true, () => false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 4);
     on();
@@ -89,7 +93,7 @@ export function Navbar() {
               </nav>
             )}
           </div>
-          {!ready ? (
+          {!hydrated || !ready ? (
             <Spinner />
           ) : authenticated && address ? (
             <WalletMenu />
@@ -112,6 +116,8 @@ export function Navbar() {
 function WalletMenu() {
   const { address, mainAddress, logout, error } = useSession();
   const { open, setOpen, ref } = useDismissable();
+  // fetched while closed so opening the menu shows balances, not a fresh load
+  const holdings = useHoldings();
 
   return (
     <div className="relative" ref={ref}>
@@ -134,7 +140,7 @@ function WalletMenu() {
                 {mainAddress && <AddressRow label="Wallet" address={mainAddress} />}
                 <AddressRow label="Account" address={address} />
               </dl>
-              <Wallet />
+              <Wallet h={holdings} />
               <div className="flex gap-2">
                 <AnyChainButton className="flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
                 <AnyChainWithdrawButton className="flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
@@ -174,8 +180,7 @@ function AddressRow({ label, address }: { label: string; address: string }) {
   );
 }
 
-function Wallet() {
-  const h = useHoldings();
+function Wallet({ h }: { h: ReturnType<typeof useHoldings> }) {
   const amt = (sym: string) => {
     const t = h.data?.tokens.find((x) => x.symbol === sym);
     return t ? fmtNum(Number(t.amount)) : h.data ? "0" : "…";
