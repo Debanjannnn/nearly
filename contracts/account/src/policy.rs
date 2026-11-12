@@ -4,8 +4,6 @@ use near_sdk::{env, require, AccountId};
 use crate::step::Step;
 use crate::Contract;
 
-const DAY_NS: u64 = 86_400 * 1_000_000_000;
-
 impl Contract {
     pub(crate) fn assert_owner(&self) {
         require!(env::predecessor_account_id() == self.owner, "only owner");
@@ -35,19 +33,8 @@ impl Contract {
             None => self.near_cap,
         };
         require!(amount <= cap, "over cap");
-        // fixed UTC-day buckets: worst case 2x the limit across midnight
-        let day = env::block_timestamp() / DAY_NS;
         let key = token.map_or("near".to_string(), |t| t.to_string());
-        let used = match self.spent.get(&key) {
-            Some(&(d, used)) if d == day => used,
-            _ => 0,
-        };
-        let total = used.saturating_add(amount);
-        require!(
-            total <= cap.saturating_mul(self.daily_steps.into()),
-            "over daily cap"
-        );
-        self.spent.insert(key, (day, total));
+        self.book_spend(key, amount, cap.saturating_mul(self.daily_steps.into()));
     }
 
     pub(crate) fn check_step(&mut self, step: &Step) {
@@ -57,12 +44,15 @@ impl Contract {
             | Step::Fee { token, amount }
             | Step::ToOwner { token, amount } => self.assert_cap(Some(token), amount.0),
             Step::Swap {
+                pool_id,
                 token_in,
                 token_out,
                 amount_in,
-                ..
+                min_out,
             } => {
                 require!(token_in != token_out, "same token");
+                require!(self.pools.contains(pool_id), "pool not whitelisted");
+                require!(min_out.0 > 0, "zero min_out");
                 require!(self.caps.contains_key(token_out), "token not whitelisted");
                 // LST exit spends the staking position (NEAR value), capped like stake
                 let t = Some(token_in).filter(|t| **t != self.venues.staking);

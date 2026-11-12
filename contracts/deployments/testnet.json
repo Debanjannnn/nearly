@@ -10,5 +10,8 @@
     "lending": "burrow.services.ref-labs.testnet",
     "dex": "ref-finance-101.testnet",
     "staking": "linear-protocol.testnet"
-  }
+  },
+  "pools": [
+    1900
+  ]
 }
