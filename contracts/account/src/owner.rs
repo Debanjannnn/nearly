@@ -89,12 +89,19 @@ impl Contract {
         self.near_cap = cap.0;
     }
 
-    /// Daily limit = `steps` × per-step cap, per token.
+    /// Limit per token in any 24h = `steps` × per-step cap.
     #[payable]
     pub fn set_daily_steps(&mut self, steps: u32) {
         self.assert_owner_call();
         require!(steps > 0, "zero steps");
         self.daily_steps = steps;
+    }
+
+    /// Replaces the Rhea pools swaps may use.
+    #[payable]
+    pub fn set_pools(&mut self, pools: Vec<u64>) {
+        self.assert_owner_call();
+        self.pools = pools;
     }
 
     /// Deletes the executor key; every later executor call fails.

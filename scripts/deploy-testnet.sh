@@ -24,7 +24,7 @@ sub "$FACTORY" '5.5 NEAR'
 INIT=$(jq -c --arg owner "$ROOT" --arg t "$TREASURY" '{owner: $owner, config: {
   treasury: $t, venues: .venues,
   tokens: [[.tokens.usdc, "1000000000"], [.tokens.wnear, "100000000000000000000000000"]],
-  near_cap: "100000000000000000000000000"}}' "$DEP")
+  near_cap: "100000000000000000000000000", pools: .pools}}' "$DEP")
 near contract deploy "$FACTORY" use-file contracts/res/nearly_factory.wasm \
   with-init-call new json-args "$INIT" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
   "${NET[@]}" sign-with-legacy-keychain send

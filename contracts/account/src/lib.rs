@@ -6,6 +6,7 @@ use near_sdk::{near, AccountId, BorshStorageKey, PanicOnDefault, PublicKey};
 mod events;
 mod executor;
 mod ledger;
+mod limit;
 mod owner;
 mod policy;
 pub mod step;
@@ -32,8 +33,10 @@ pub struct Policy {
     /// token -> per-step cap; a token is whitelisted iff it has a cap.
     pub caps: Vec<(AccountId, U128)>,
     pub near_cap: U128,
-    /// executor may move at most `daily_steps` × cap per token per UTC day
+    /// executor may move at most `daily_steps` × cap per token in any 24h
     pub daily_steps: u32,
+    /// Rhea pool ids swaps may use
+    pub pools: Vec<u64>,
 }
 
 #[near]
@@ -60,13 +63,15 @@ pub struct Contract {
     balances: IterableMap<AccountId, u128>,
     positions: IterableMap<String, u128>,
     daily_steps: u32,
-    /// token (or "near") -> (UTC day, amount moved by the executor that day)
-    spent: LookupMap<String, (u64, u128)>,
+    /// token (or "near") -> executor spends (timestamp, amount) in the last 24h
+    spent: LookupMap<String, Vec<(u64, u128)>>,
+    pools: Vec<u64>,
 }
 
 #[near]
 impl Contract {
     #[init]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         owner: AccountId,
         executor: PublicKey,
@@ -74,6 +79,7 @@ impl Contract {
         venues: Venues,
         tokens: Vec<(AccountId, U128)>,
         near_cap: U128,
+        pools: Vec<u64>,
     ) -> Self {
         let mut c = Self {
             owner,
@@ -87,6 +93,7 @@ impl Contract {
             positions: IterableMap::new(Key::Positions),
             daily_steps: DEFAULT_DAILY_STEPS,
             spent: LookupMap::new(Key::Spent),
+            pools,
         };
         for (token, cap) in tokens {
             c.add_token(token, cap.0);
@@ -114,6 +121,7 @@ impl Contract {
                 .collect(),
             near_cap: U128(self.near_cap),
             daily_steps: self.daily_steps,
+            pools: self.pools.clone(),
         }
     }
 

@@ -51,6 +51,7 @@ fn setup() -> Contract {
         },
         vec![(acc(USDC), U128(1_000)), (acc(WNEAR), U128(1_000))],
         U128(5_000),
+        vec![1, 7, 3515],
     );
     set(USDC, other_pk(), 0);
     c.ft_on_transfer(acc("bob.testnet"), U128(2_000), String::new());
@@ -287,10 +288,14 @@ fn owner_edits_policy() {
     assert_eq!(p.near_cap, U128(7));
 }
 
-fn executor_on_day(day: u64) {
+fn executor_at_hour(h: u64) {
     let mut b = ctx(ME, exec_pk(), 0);
-    b.block_timestamp(day * 86_400 * 1_000_000_000);
+    b.block_timestamp(h * 3_600 * 1_000_000_000);
     testing_env!(b.build());
+}
+
+fn executor_on_day(day: u64) {
+    executor_at_hour(day * 24);
 }
 
 fn fee(c: &mut Contract, amount: u128) {
@@ -330,6 +335,72 @@ fn daily_steps_only_owner() {
     let mut c = setup();
     set("mallory.testnet", other_pk(), 1);
     c.set_daily_steps(100);
+}
+
+#[test]
+#[should_panic(expected = "over daily cap")]
+fn daily_cap_is_rolling_not_calendar() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.set_daily_steps(1);
+    executor_at_hour(23);
+    fee(&mut c, 1_000);
+    executor_at_hour(25);
+    fee(&mut c, 1);
+}
+
+#[test]
+#[should_panic(expected = "too many steps in 24h")]
+fn spend_log_is_bounded() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.set_daily_steps(1_000);
+    for _ in 0..=crate::limit::MAX_SPENDS {
+        as_executor();
+        fee(&mut c, 1);
+    }
+}
+
+fn swap_on(pool_id: u64, min_out: u128) -> Step {
+    Step::Swap {
+        pool_id,
+        token_in: acc(USDC),
+        token_out: acc(WNEAR),
+        amount_in: U128(500),
+        min_out: U128(min_out),
+    }
+}
+
+#[test]
+#[should_panic(expected = "pool not whitelisted")]
+fn swap_on_unknown_pool_rejected() {
+    let mut c = setup();
+    as_executor();
+    c.execute_step(swap_on(666, 1));
+}
+
+#[test]
+#[should_panic(expected = "zero min_out")]
+fn swap_without_min_out_rejected() {
+    let mut c = setup();
+    as_executor();
+    c.execute_step(swap_on(1, 0));
+}
+
+#[test]
+fn owner_sets_pools() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.set_pools(vec![42]);
+    assert_eq!(c.get_policy().pools, vec![42]);
+}
+
+#[test]
+#[should_panic(expected = "only owner")]
+fn pools_only_owner() {
+    let mut c = setup();
+    set("mallory.testnet", other_pk(), 1);
+    c.set_pools(vec![666]);
 }
 
 #[test]

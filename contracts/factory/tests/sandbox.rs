@@ -32,6 +32,7 @@ async fn executor_key_is_scoped_and_revocable() -> anyhow::Result<()> {
             "venues": {"lending": venue, "dex": venue, "staking": venue},
             "tokens": [],
             "near_cap": "1000",
+            "pools": [1],
         }}))
         .transact()
         .await?

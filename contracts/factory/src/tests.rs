@@ -36,6 +36,7 @@ fn setup() -> Factory {
             },
             tokens: vec![(acc("usdc.testnet"), U128(1_000))],
             near_cap: U128(1),
+            pools: vec![1],
         },
     )
 }
@@ -111,4 +112,30 @@ fn config_only_owner() {
     call_as("mallory.testnet", NearToken::from_yoctonear(0));
     let c = f.get_config().clone();
     f.set_config(c);
+}
+
+#[test]
+fn migrate_keeps_state_and_adds_pools() {
+    use crate::migrate::{OldConfig, OldFactory};
+    use near_sdk::store::LookupMap;
+    testing_env!(ctx("factory.testnet", NearToken::from_yoctonear(0)).build());
+    let old = OldFactory {
+        owner: acc("admin.testnet"),
+        config: OldConfig {
+            treasury: acc("treasury.testnet"),
+            venues: Venues {
+                lending: acc("l.testnet"),
+                dex: acc("d.testnet"),
+                staking: acc("s.testnet"),
+            },
+            tokens: vec![(acc("usdc.testnet"), U128(1_000))],
+            near_cap: U128(1),
+        },
+        accounts: LookupMap::new(b"a"),
+    };
+    near_sdk::env::state_write(&old);
+    let f = Factory::migrate(vec![1900]);
+    assert_eq!(f.get_config().pools, vec![1900]);
+    assert_eq!(f.get_config().treasury, acc("treasury.testnet"));
+    assert_eq!(f.owner, acc("admin.testnet"));
 }
