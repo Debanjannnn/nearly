@@ -27,6 +27,8 @@ scripts/verify-testnet.sh    # every deployed account exists and has code
 make contracts-test          # 71 contract tests: policy, caps, pools, 24h limit, fee budget, revoke, migrate, sandbox runs
 ```
 
+On chain: the [On-chain proof](#on-chain-proof-near-testnet) table lists a full testnet run, with every allowed step and every rejection linked to its transaction.
+
 | Track | What to look at |
 |---|---|
 | `defi` | Baskets across Rhea lending, the Rhea DEX and liquid staking; backtests; deposit and withdraw from any chain via NEAR Intents 1Click |
@@ -129,23 +131,34 @@ Source of truth: `contracts/deployments/testnet.json`. Check with `scripts/verif
 
 ## On-chain proof (NEAR testnet)
 
-Real transactions from the demo account `nearly-dev-c7dc68-testnet.factory.nearly-dev-c7dc68.testnet`, signed by the bot's function-call key:
+A full run on account [`nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet`](https://testnet.nearblocks.io/address/nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet), created by the current factory. The owner is `nearly-demo-1112.testnet`; every bot step is signed only by the bot's function-call key.
 
-| What | Result | Transaction |
-|---|---|---|
-| Bot runs a `stake` step (0.1 wNEAR → LiNEAR) | ✅ succeeds | [`GtzHERVS…`](https://testnet.nearblocks.io/txns/GtzHERVSbqpHvtmB2PFtHzEdZeS7HkRAE7YCyDKU4UnA) |
-| Bot tries to unstake 1000 NEAR (cap is 100) | ❌ `Smart contract panicked: over cap` | [`36tY4UZf…`](https://testnet.nearblocks.io/txns/36tY4UZfR3U9BU3BannDU9RkQbErjD7qZm9EAxayMJSP) |
-| Factory upgrade: new code + `migrate` adding the pool whitelist, in one transaction | ✅ succeeds | [`EWDdvv9n…`](https://testnet.nearblocks.io/txns/EWDdvv9nHfLEugj2vNuUkB99tSb1hCaGNYR6kN3RNhZN) |
+| # | What | Result | Transaction |
+|---|---|---|---|
+| 1 | Owner creates a Nearly account through the factory; its only key is the bot's, limited to `execute_step` | ✅ created | [`AcmT2Cmj…`](https://testnet.nearblocks.io/txns/AcmT2CmjWurhidWAscC2zkVUMUtjwbAhjVHaVXcaXets) |
+| 2 | Owner deposits 2 wNEAR | ✅ | [`8wJpSMtw…`](https://testnet.nearblocks.io/txns/8wJpSMtwo65uDyM9XZUdqe2H5fhxsxYJQ5isCytqWBA3) |
+| 3 | Bot stakes 0.5 wNEAR into LiNEAR | ✅ position booked | [`GZZtFXZN…`](https://testnet.nearblocks.io/txns/GZZtFXZNdQqA2ZPQm8LAVKWU6LxcNJofD225kTtbo4dZ) |
+| 4 | Bot pays a 0.01 wNEAR treasury fee | ✅ | [`9t4Sywkt…`](https://testnet.nearblocks.io/txns/9t4SywktykKPNp5BP6r9adBK8jbhyLkhqr86FeXEg5aZ) |
+| 5 | Bot swaps on pool 666 (not whitelisted) | ❌ `pool not whitelisted` | [`FSssFRmH…`](https://testnet.nearblocks.io/txns/FSssFRmHQjunYwmYNH3iwAAvKvBYvQwPAuSYc5V5qhrb) |
+| 6 | Bot swaps on pool 1900 with `min_out` 0 | ❌ `zero min_out` | [`DLjC8mCY…`](https://testnet.nearblocks.io/txns/DLjC8mCYjNJikf1UENp8Zi2rGDUiCw3xBmN76mnQ38gX) |
+| 7 | Bot sends a 5 wNEAR fee (budget is 4) | ❌ `over daily cap` | [`zZqSLXzW…`](https://testnet.nearblocks.io/txns/zZqSLXzWmvi8f7xezMP9PudgrJzbHQoF3jXLLfxv9SA) |
+| 8 | Bot moves 101 wNEAR (cap is 100) | ❌ `over cap` | [`25MM4hNP…`](https://testnet.nearblocks.io/txns/25MM4hNPcqBGLmjmw8zgugmYYHBWyRNYcdNsM5Cdft1T) |
+| 9 | Owner lowers the wNEAR cap to 0.3 and `daily_steps` to 1 | ✅ | [`CCctZwyk…`](https://testnet.nearblocks.io/txns/CCctZwykaMbTS1xfKh5WPTBtCMb1wRXpVbFTboiv21Ws) |
+| 10 | Bot returns 0.2 wNEAR to the owner | ✅ | [`7EHetPSc…`](https://testnet.nearblocks.io/txns/7EHetPSctACJxQnXATwf6FoafDp5Skjx4yV7zaJH4gRa) |
+| 11 | Bot returns another 0.2 wNEAR (24h total would be 0.41 > 0.3) | ❌ `over daily cap` | [`9QdgFCTs…`](https://testnet.nearblocks.io/txns/9QdgFCTssVLsnwpWu7nB8sU5ExxrbKEyUg7D59Bqi1PB) |
+| 12 | Owner calls `revoke_executor` | ✅ account left with 0 keys | [`3NPiufCD…`](https://testnet.nearblocks.io/txns/3NPiufCD5DvzCYpuutzN21YzU5wrgR6MsRxaBGyeso2y) |
+| 13 | Bot tries one more step | ❌ can't sign: `Access key … does not exist` | no transaction possible |
+| 14 | Factory upgrade: new code + `migrate` adding the pool whitelist | ✅ | [`EWDdvv9n…`](https://testnet.nearblocks.io/txns/EWDdvv9nHfLEugj2vNuUkB99tSb1hCaGNYR6kN3RNhZN) |
 
-To check the rejection yourself:
+Check any rejection yourself, for example the pool check:
 
 ```sh
 curl -s https://archival-rpc.testnet.near.org -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tx","params":["36tY4UZfR3U9BU3BannDU9RkQbErjD7qZm9EAxayMJSP","nearly-dev-c7dc68-testnet.factory.nearly-dev-c7dc68.testnet"]}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tx","params":["FSssFRmHQjunYwmYNH3iwAAvKvBYvQwPAuSYc5V5qhrb","nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet"]}' \
   | jq '.result.receipts_outcome[0].outcome.status'
 ```
 
-This demo account was created before the pool whitelist, rolling limit and fee budget existed, and accounts keep the code they were created with. New accounts from the factory get all of them.
+An older account, from before the pool whitelist and 24h limit, also shows a live stake ([`GtzHERVS…`](https://testnet.nearblocks.io/txns/GtzHERVSbqpHvtmB2PFtHzEdZeS7HkRAE7YCyDKU4UnA)) and an `over cap` rejection ([`36tY4UZf…`](https://testnet.nearblocks.io/txns/36tY4UZfR3U9BU3BannDU9RkQbErjD7qZm9EAxayMJSP)).
 
 ## Try the app (testnet)
 
