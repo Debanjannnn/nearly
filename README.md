@@ -53,7 +53,7 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 | swaps through an attacker's pool | ❌ `pool not whitelisted`; swaps also need `min_out` > 0 | `contracts/account/src/policy.rs:64` |
 | moves more than the cap in one step | ❌ `over cap` | `contracts/account/src/policy.rs:29` |
 | repeats steps to drain over time | ❌ `over daily cap`: at most `daily_steps` × cap per token in **any** 24 hours (default 10), and at most 64 steps | `contracts/account/src/limit.rs:12` |
-| keeps acting after you notice | ❌ `revoke_executor` deletes the key; later calls fail with `executor revoked` | `contracts/account/src/owner.rs:109` |
+| keeps acting after you notice | ❌ `revoke_executor` deletes the key, so the bot can't sign at all; a contract flag (`executor revoked`) blocks it as a backup | `contracts/account/src/owner.rs:109` |
 | pays itself through treasury fees | ❌ fees are capped at 0.4% of the token's 24h limit, a constant nobody can raise | `contracts/account/src/policy.rs:54` |
 | accepts a poor price on a whitelisted pool | ⚠️ price slippage on whitelisted pools, bounded by the per-step and 24h caps (see Known limits) | — |
 
@@ -126,6 +126,26 @@ Funds leave your account only to these venues, the treasury fee, or back to you 
 
 Source of truth: `contracts/deployments/testnet.json`. Check with `scripts/verify-testnet.sh`; redeploy with `scripts/deploy-testnet.sh`.
 
+## On-chain proof (NEAR testnet)
+
+Real transactions from the demo account `nearly-dev-c7dc68-testnet.factory.nearly-dev-c7dc68.testnet`, signed by the bot's function-call key:
+
+| What | Result | Transaction |
+|---|---|---|
+| Bot runs a `stake` step (0.1 wNEAR → LiNEAR) | ✅ succeeds | [`GtzHERVS…`](https://testnet.nearblocks.io/txns/GtzHERVSbqpHvtmB2PFtHzEdZeS7HkRAE7YCyDKU4UnA) |
+| Bot tries to unstake 1000 NEAR (cap is 100) | ❌ `Smart contract panicked: over cap` | [`36tY4UZf…`](https://testnet.nearblocks.io/txns/36tY4UZfR3U9BU3BannDU9RkQbErjD7qZm9EAxayMJSP) |
+| Factory upgrade: new code + `migrate` adding the pool whitelist, in one transaction | ✅ succeeds | [`EWDdvv9n…`](https://testnet.nearblocks.io/txns/EWDdvv9nHfLEugj2vNuUkB99tSb1hCaGNYR6kN3RNhZN) |
+
+To check the rejection yourself:
+
+```sh
+curl -s https://archival-rpc.testnet.near.org -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tx","params":["36tY4UZfR3U9BU3BannDU9RkQbErjD7qZm9EAxayMJSP","nearly-dev-c7dc68-testnet.factory.nearly-dev-c7dc68.testnet"]}' \
+  | jq '.result.receipts_outcome[0].outcome.status'
+```
+
+This demo account was created before the pool whitelist, rolling limit and fee budget existed, and accounts keep the code they were created with. New accounts from the factory get all of them.
+
 ## Try the app (testnet)
 
 Prerequisites: Docker, Go 1.25+, Rust + `cargo-near`, Bun, and a NEAR testnet wallet.
@@ -146,7 +166,7 @@ Then in the app:
 3. **Open the basket, deposit, and deploy.**
    → The executor runs the steps. **Portfolio → Executions** lists each run with its transaction hash.
 4. **Go to Portfolio → Revoke.**
-   → The bot's key is deleted. Any later step fails on chain with `executor revoked`.
+   → The bot's key is deleted from your account, so the bot can no longer sign any transaction for it.
 5. **Go to Risk.**
    → You see your exposure by venue and token.
 
