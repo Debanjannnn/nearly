@@ -23,7 +23,9 @@ pub enum Step {
         #[serde(with = "u128_str")]
         min_out: u128,
     },
+    /// `token` = wNEAR the contract unwraps first.
     Stake {
+        token: String,
         #[serde(with = "u128_str")]
         amount: u128,
     },
@@ -56,7 +58,8 @@ impl Step {
                 amount_in,
                 ..
             } => (Some(token_in), *amount_in),
-            Step::Stake { amount } | Step::Unstake { amount } => (None, *amount),
+            // wNEAR is priced as NEAR either way
+            Step::Stake { amount, .. } | Step::Unstake { amount } => (None, *amount),
         }
     }
 }
@@ -90,15 +93,20 @@ mod tests {
         let s: Step = serde_json::from_value(json!({"kind":"swap","pool_id":0,"token_in":"a","token_out":"b","amount_in":"340282366920938463463374607431768211455","min_out":"1"})).unwrap();
         assert_eq!(s.spend(), (Some("a"), u128::MAX));
         assert_eq!(
-            serde_json::to_value(Step::Stake { amount: 5 }).unwrap(),
-            json!({"kind":"stake","amount":"5"})
+            serde_json::to_value(Step::Stake {
+                token: "w".into(),
+                amount: 5
+            })
+            .unwrap(),
+            json!({"kind":"stake","token":"w","amount":"5"})
         );
         for bad in [
             json!({"kind":"stake","amount":5}),
             json!({"kind":"stake","amount":"-1"}),
             json!({"kind":"stake","amount":"+1"}),
             json!({"kind":"stake","amount":"340282366920938463463374607431768211456"}),
-            json!({"kind":"stake","amount":"1","token":"x"}),
+            json!({"kind":"stake","amount":"1"}),
+            json!({"kind":"unstake","amount":"1","token":"x"}),
             json!({"kind":"transfer","token":"x","amount":"1"}),
         ] {
             assert!(

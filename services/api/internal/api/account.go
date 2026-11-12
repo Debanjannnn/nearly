@@ -120,7 +120,7 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 			"actions": []any{map[string]any{"type": "FunctionCall", "params": map[string]any{
 				"methodName": "create_account",
 				"args":       map[string]string{"owner": me, "executor_pubkey": s.ExecutorKey},
-				"gas":        "150000000000000",
+				"gas":        "300000000000000", // factory loads 0.5MB wasm + 110 Tgas inner; 150 ran out
 				"deposit":    deposit,
 			}}},
 		},

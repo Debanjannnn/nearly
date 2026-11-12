@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, useIsPresent } from "motion/react";
 import { Check, Copy, ExternalLink, X } from "lucide-react";
-import { txUrl } from "@/lib/config";
+import { NETWORK, txUrl } from "@/lib/config";
 import { intentStatus, isDone, tokenLogos, txHash, txLink, type Intent, type IntentToken } from "@/lib/intents";
+import { useSession } from "@/lib/session";
+import { fmtUnits, parseAmount, TOKENS, type Token } from "@/lib/tokens";
 import { cn } from "@/lib/utils";
-import { ErrorBox } from "@/components/ui";
+import { Button, ErrorBox } from "@/components/ui";
 import { EASE } from "@/components/motion";
 import { ProtocolIcon } from "@/components/ProtocolIcon";
 
@@ -41,10 +43,12 @@ export function IntentDialog({ title, subtitle, onClose, children }: { title: st
         </button>
       </div>
       {children}
-      <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
-        <ProtocolIcon protocol="intents" size={14} />
-        Routed by NEAR Intents 1Click
-      </p>
+      {NETWORK === "mainnet" && (
+        <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+          <ProtocolIcon protocol="intents" size={14} />
+          Routed by NEAR Intents 1Click
+        </p>
+      )}
     </motion.dialog>
   );
 }
@@ -210,3 +214,78 @@ export function IntentIcon({ token, size }: { token: IntentToken; size: number }
 }
 
 export const inputCls = "w-full rounded-xl border border-border bg-card px-3 py-2.5 font-mono text-xs outline-none focus:border-primary/50";
+
+export const TGAS = "000000000000";
+const STORAGE = "1250000000000000000000"; // 0.00125 NEAR, refunded if already registered
+export const fc = (methodName: string, args: object, deposit: string, gas = `30${TGAS}`) => ({ type: "FunctionCall" as const, params: { methodName, args, gas, deposit } });
+export const register = (account_id: string) => fc("storage_deposit", { account_id, registration_only: true }, STORAGE);
+
+type Txs = Parameters<ReturnType<typeof useSession>["send"]>[0];
+const FTS = TOKENS.filter((t) => !!t.key);
+
+// testnet has no Intents: the owner wallet signs a direct move into / out of the sub-account
+export function TestnetForm({ verb, note, balanceOf, txs, onDone }: { verb: string; note: string; balanceOf?: (t: Token) => string | undefined; txs: (t: Token, raw: bigint) => Txs; onDone?: () => void }) {
+  const { send } = useSession();
+  const [id, setId] = useState(FTS[0]?.address);
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const t = FTS.find((x) => x.address === id);
+  const raw = t ? parseAmount(amount, t.decimals) : null;
+  const bal = t ? balanceOf?.(t) : undefined;
+  const over = raw !== null && bal !== undefined && raw > BigInt(bal);
+
+  async function go() {
+    setBusy(true);
+    setErr(null);
+    setDone(null);
+    try {
+      await send(txs(t!, raw!));
+      setDone(`${fmtUnits(raw!, t!.decimals)} ${t!.symbol}`);
+      setAmount("");
+      onDone?.();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Field label={verb}>
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+          <input
+            autoFocus
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+            placeholder="0"
+            aria-label={`Amount to ${verb.toLowerCase()}`}
+            className="tnum w-full min-w-0 bg-transparent text-3xl font-medium outline-none placeholder:text-muted-foreground/40"
+          />
+          <div className="flex shrink-0 gap-1">
+            {FTS.map((x) => (
+              <Chip key={x.address} on={x.address === id} onClick={() => setId(x.address)}>
+                {x.symbol}
+              </Chip>
+            ))}
+          </div>
+        </div>
+        {t && bal !== undefined && (
+          <button type="button" onClick={() => setAmount(fmtUnits(bal, t.decimals, t.decimals).replace(/,/g, ""))} className="tnum text-xs text-muted-foreground hover:text-foreground">
+            Balance {fmtUnits(bal, t.decimals)} {t.symbol} · Max
+          </button>
+        )}
+        {over && <p className="text-xs text-destructive">More than your balance.</p>}
+      </Field>
+      {done && <p className="rounded-2xl bg-positive/10 px-4 py-3 text-sm font-medium text-positive">{done} sent</p>}
+      {err && <ErrorBox message={err} />}
+      <Button className="w-full py-3" pending={busy} disabled={!raw || raw <= 0n || over || busy} onClick={() => void go()}>
+        {verb} {t?.symbol}
+      </Button>
+      <p className="text-[11px] text-muted-foreground">{note}</p>
+    </>
+  );
+}

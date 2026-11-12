@@ -21,7 +21,9 @@ pub enum Step {
         amount_in: U128,
         min_out: U128,
     },
+    /// `token` = wNEAR; contract unwraps it, then stakes the NEAR.
     Stake {
+        token: AccountId,
         amount: U128,
     },
     Unstake {

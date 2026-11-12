@@ -1,7 +1,7 @@
 //! Executor entrypoint: policy check, then dispatch one step to its venue.
 use near_sdk::json_types::U128;
 use near_sdk::serde_json;
-use near_sdk::{env, near, require, AccountId, Gas, NearToken, Promise, PromiseOrValue};
+use near_sdk::{env, near, AccountId, Gas, Promise, PromiseError, PromiseOrValue};
 
 use crate::events::Event;
 use crate::ledger::Slot;
@@ -9,13 +9,15 @@ use crate::step::Step;
 use crate::venues;
 use crate::{Contract, ContractExt};
 
-/// NEAR kept back for storage of new state + gas of later executor txs.
-const NEAR_RESERVE: NearToken = NearToken::from_millinear(500);
 /// Withdraw leg + settle + observe, issued from `on_lend_asset`.
 const GAS_LEND_CB: Gas = Gas::from_tgas(160);
 /// Swap leg + settle + observe, issued from `on_lst_exit`.
 const GAS_LST_CB: Gas = Gas::from_tgas(190);
 const GAS_LST_SETTLE: Gas = Gas::from_tgas(10);
+/// Stake leg + `on_stake`, issued from `on_unwrap`.
+const GAS_STAKE_CB: Gas = Gas::from_tgas(150);
+/// Re-wrap + observe on a failed stake.
+const GAS_REWRAP_CB: Gas = Gas::from_tgas(50);
 /// ft_price scale; price is cut to 10 decimals so amount * 1e10 fits u128 up to ~34k NEAR.
 const PRICE_CUT: u128 = 100_000_000_000_000;
 const SHARE_ONE: u128 = 10_000_000_000;
@@ -93,15 +95,12 @@ impl Contract {
                 let p = self.settle(p, Some(bal_in), amount_in.0, None, true);
                 Self::observe(p, token_out)
             }
-            Step::Stake { amount } => {
-                require!(amount.0 <= free_near(), "insufficient NEAR");
-                let pos = Slot::Position(STAKING_KEY.into());
-                self.settle(
-                    venues::stake(v.staking, amount.0),
-                    None,
-                    amount.0,
-                    Some(pos),
-                    false,
+            Step::Stake { token, amount } => {
+                self.debit(&Slot::Balance(token.clone()), amount.0);
+                venues::unwrap(token.clone(), amount.0).then(
+                    Self::ext(env::current_account_id())
+                        .with_static_gas(GAS_STAKE_CB)
+                        .on_unwrap(token, amount),
                 )
             }
             Step::Unstake { amount } => {
@@ -192,6 +191,34 @@ impl Contract {
         PromiseOrValue::Promise(Self::observe(p, token_out))
     }
 
+    /// Unwrap failed = wNEAR refunded. Else stake; a failed stake re-wraps (see `on_stake`).
+    #[private]
+    pub fn on_unwrap(&mut self, token: AccountId, amount: U128) -> PromiseOrValue<U128> {
+        if failed() {
+            self.credit(&Slot::Balance(token), amount.0);
+            return PromiseOrValue::Value(U128(0));
+        }
+        let v = self.venues.clone();
+        PromiseOrValue::Promise(
+            venues::stake(v.staking, amount.0).then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_REWRAP_CB)
+                    .on_stake(token, amount),
+            ),
+        )
+    }
+
+    /// Staked = position booked. Failed = NEAR wrapped back and credited via observe.
+    #[private]
+    pub fn on_stake(&mut self, token: AccountId, amount: U128) -> PromiseOrValue<U128> {
+        if !failed() {
+            self.credit(&Slot::Position(STAKING_KEY.into()), amount.0);
+            return PromiseOrValue::Value(amount);
+        }
+        let p = venues::wrap(token.clone(), amount.0);
+        PromiseOrValue::Promise(Self::observe(p, token))
+    }
+
     /// Ref swaps all or nothing: no shares used = position refunded.
     #[private]
     pub fn on_lst_swap(&mut self, amount: U128) -> U128 {
@@ -211,9 +238,6 @@ impl Contract {
     }
 }
 
-fn free_near() -> u128 {
-    let locked = env::storage_usage() as u128 * env::storage_byte_cost().as_yoctonear();
-    env::account_balance()
-        .as_yoctonear()
-        .saturating_sub(locked + NEAR_RESERVE.as_yoctonear())
+fn failed() -> bool {
+    matches!(env::promise_result_checked(0, 0), Err(PromiseError::Failed))
 }

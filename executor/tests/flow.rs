@@ -113,7 +113,7 @@ async fn execute_flow() {
     let (app, log) = setup().await;
     let steps = json!([
         {"kind": "supply", "token": USDC, "amount": "1000000"},
-        {"kind": "stake", "amount": "1000000000000000000000000"},
+        {"kind": "stake", "token": "wrap.testnet", "amount": "1000000000000000000000000"},
         {"kind": "to_owner", "token": USDC, "amount": "5"},
         {"kind": "fee", "token": USDC, "amount": "5"}
     ]);
@@ -131,7 +131,7 @@ async fn execute_flow() {
     )
     .await;
     assert_eq!(code, 422);
-    let over = json!([{"kind": "stake", "amount": "334000000000000000000000000"}]);
+    let over = json!([{"kind": "stake", "token": "wrap.testnet", "amount": "334000000000000000000000000"}]);
     let (code, _) = post_exec(&app, "s3cret", body("e0", over)).await;
     assert_eq!(code, 422);
     assert!(

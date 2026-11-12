@@ -346,11 +346,12 @@ where execution_id=$1 and idx=$2`, execID, r.Index, r.Status, r.TxHash, r.Error)
 }
 
 // SettleDeploy opens the position with held, or closes it on failure; fee lands in fee_ledger once paid.
-func (p Store) SettleDeploy(ctx context.Context, posID, execID string, ok bool, held []string, fee *FeeRow) error {
+// stranded = a failed deploy already moved funds into venues; it stays open so withdraw (capped by live
+// balances on resume) pulls them out. Otherwise a failed deploy closes and funds sit in the account wallet.
+func (p Store) SettleDeploy(ctx context.Context, posID, execID string, ok, stranded bool, held []string, fee *FeeRow) error {
 	return pgx.BeginFunc(ctx, p.DB, func(tx pgx.Tx) error {
-		// shortcut: a failed deploy closes with held [], funds already moved stay in the account for the owner to pull
 		state, h := "closed", []string{}
-		if ok {
+		if ok || stranded {
 			state, h = "open", held
 		}
 		if _, err := tx.Exec(ctx, `update positions set state=$2, held=$3, updated_at=now() where id=$1`, posID, state, h); err != nil {

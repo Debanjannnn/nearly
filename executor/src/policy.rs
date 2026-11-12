@@ -110,6 +110,7 @@ mod tests {
     }
 
     const USDC: &str = "usdcc.ft.ref-labs.testnet";
+    const WNEAR: &str = "wrap.testnet";
     const P: Option<u128> = Some(3 * USDC_ONE);
 
     #[test]
@@ -157,15 +158,26 @@ mod tests {
         })
         .is_err());
         assert!(ok(Step::Stake {
+            token: WNEAR.into(),
             amount: 333 * NEAR_ONE
         })
         .is_ok());
         assert!(ok(Step::Stake {
+            token: WNEAR.into(),
             amount: 334 * NEAR_ONE
         })
         .is_err());
         assert!(ok(Step::Unstake { amount: u128::MAX }).is_err());
-        assert!(check(&d, &[Step::Stake { amount: 1 }], 1000, None).is_err());
+        assert!(check(
+            &d,
+            &[Step::Stake {
+                token: WNEAR.into(),
+                amount: 1
+            }],
+            1000,
+            None
+        )
+        .is_err());
         let swap = |out: &str, min_out| Step::Swap {
             pool_id: 1,
             token_in: USDC.into(),

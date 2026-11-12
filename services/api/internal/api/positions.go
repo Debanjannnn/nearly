@@ -51,7 +51,8 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 		if done == 0 {
 			fee = nil // fee step is first; nothing paid
 		}
-		if err := s.Store.SettleDeploy(ctx, posID, execID, ok, plan.Held, fee); err != nil {
+		stranded := !ok && done > 1 // past the fee step, something sits in a venue
+		if err := s.Store.SettleDeploy(ctx, posID, execID, ok, stranded, plan.Held, fee); err != nil {
 			slog.Error("settle deploy", "position", posID, "err", err)
 		}
 	})

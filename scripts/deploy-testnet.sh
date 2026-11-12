@@ -29,6 +29,12 @@ near contract deploy "$FACTORY" use-file contracts/res/nearly_factory.wasm \
   with-init-call new json-args "$INIT" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
   "${NET[@]}" sign-with-legacy-keychain send
 
+# fee step ft_transfers to treasury: unregistered = every deploy fails + refunds
+for t in $(jq -r '.tokens[]' "$DEP"); do
+  near contract call-function as-transaction "$t" storage_deposit json-args "{\"account_id\":\"$TREASURY\"}" \
+    prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' sign-as "$ROOT" "${NET[@]}" sign-with-legacy-keychain send
+done
+
 jq --arg f "$FACTORY" --arg t "$TREASURY" '.factory = $f | .treasury = $t' "$DEP" >"$DEP.tmp"
 mv "$DEP.tmp" "$DEP"
 echo "factory: https://testnet.nearblocks.io/address/$FACTORY"
