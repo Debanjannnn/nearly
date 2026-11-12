@@ -70,25 +70,26 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 ## Architecture
 
 ```mermaid
-flowchart LR
-  U([👤 User wallet<br/>NEAR Connect]) -->|NEP-413 sign-in| C[🖥️ client<br/>Next.js]
+flowchart TD
+  U([👤 User · NEAR wallet])
+  U -->|NEP-413 sign-in| C[🖥️ client · Next.js]
+  U -->|signs create_account| F[🏭 factory contract]
   C --> API[⚙️ api · Go]
   API --> S[⏱️ scheduler · Go]
+  API --> M[📈 market-data + history · Go]
+  API <-->|any-chain in/out| I[🌉 NEAR Intents 1Click]
   S --> X[🔑 executor · Rust<br/>function-call key]
-  API --> MD[📈 market-data · Go]
-  API --> H[📊 history · Go<br/>backtests]
-  API <--> I[🌉 NEAR Intents 1Click<br/>any-chain in/out]
-  U -->|signs create_account| F[🏭 factory contract]
-  F -->|deploys + adds bot key| A[🔒 your account contract<br/>policy · caps · daily limit]
+  F -->|deploys + adds bot key| A[🔒 your account contract<br/>whitelist · caps · daily limit]
   X -->|execute_step only| A
-  A -->|supply / withdraw| L[(Rhea lending)]
-  A -->|swap| D[(Rhea DEX)]
-  A -->|stake / unstake| ST[(LiNEAR staking)]
-  A -->|fee| T[(treasury)]
-  A -->|to_owner / withdraw| U
-  A -. events .-> IX[🗂️ indexer · Go] --> DB[(PostgreSQL)]
-  API --> DB
+  A --> L[(Rhea lending)]
+  A --> D[(Rhea DEX)]
+  A --> ST[(LiNEAR staking)]
+  A --> T[(treasury fee)]
+  A -.->|events| IX[🗂️ indexer · Go]
+  IX --> DB[(PostgreSQL)]
 ```
+
+Funds leave your account only to these venues, the treasury fee, or back to you (`to_owner`, `withdraw`).
 
 | Path | Role |
 |---|---|
