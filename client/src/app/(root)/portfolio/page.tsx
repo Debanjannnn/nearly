@@ -12,7 +12,7 @@ import { ValueChart } from "@/components/portfolio/ValueChart";
 import { EarningsCard } from "@/components/portfolio/Earnings";
 import { DelegationCard } from "@/components/automation/Delegation";
 import { ExecutionLog, ScheduleList } from "@/components/automation/ScheduleList";
-import { PositionsTable, STABLES, usePriceOf, valueOf } from "@/components/portfolio/Positions";
+import { heldOf, PositionsTable, STABLES, usePriceOf, valueOf } from "@/components/portfolio/Positions";
 import { liveApy } from "@/components/earn/sources";
 
 export default function PortfolioPage() {
@@ -56,9 +56,14 @@ export default function PortfolioPage() {
   const apyOf = (id: string) => (strats.get(id) ? (liveApy(strats.get(id)!, rates) ?? 0) : 0);
   const yieldPerYear = open.length ? open.reduce((a, p, i) => a + (vals[i] ?? 0) * apyOf(p.basket_id), 0) : null;
   const total = tokensUsd + posUsd;
-  const legs = (h?.tokens ?? [])
-    .map((t) => ({ market: t.symbol, amount: Number(t.amount) }))
-    .filter((l) => l.amount > 0 && tickers[l.market]);
+  // chart marks the same set as total: wallet tokens + valued positions' held, stables kept flat
+  const held = new Map<string, number>();
+  const add = (m: string, n: number) => held.set(m, (held.get(m) ?? 0) + n);
+  for (const t of h?.tokens ?? []) add(t.symbol, Number(t.amount));
+  open.forEach((p, i) => vals[i] !== null && heldOf(p, strats.get(p.basket_id)!).forEach((x) => add(x.token, x.amount)));
+  const legs = [...held]
+    .map(([market, amount]) => ({ market, amount, px: STABLES.has(market) ? 0 : (priceOf(market) ?? 0) }))
+    .filter((l) => l.amount > 0 && l.px > 0);
   const loading = !ready || (on && (holdings.loading || pxLoading));
   const near = raw("NEAR");
 
@@ -75,7 +80,7 @@ export default function PortfolioPage() {
           {ready && <Clock />}
         </header>
 
-        <ValueChart legs={legs} flat={total - legs.reduce((s, l) => s + l.amount * (priceOf(l.market) ?? 0), 0)} total={total} loading={loading} />
+        <ValueChart legs={legs} flat={total - legs.reduce((s, l) => s + l.amount * l.px, 0)} total={total} loading={loading} />
 
         {holdings.error && <ErrorBox message={`Wallet balances unavailable: ${errText(new Error(holdings.error))}`} />}
 

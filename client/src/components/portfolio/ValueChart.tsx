@@ -14,19 +14,20 @@ import { holdingsSeries, RANGES, type Range } from "./series";
 
 const usd2 = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// legs = held tokens with price history (market = token symbol); flat = USD that doesn't move with price (stables, positions)
-export function ValueChart({ legs, flat, total, loading }: { legs: { market: string; amount: number }[]; flat: number; total: number; loading: boolean }) {
+// legs = priced tokens held in wallet + open positions (market = symbol, px = live); flat = stables; total = flat + Σ amount × px
+export function ValueChart({ legs, flat, total, loading }: { legs: { market: string; amount: number; px: number }[]; flat: number; total: number; loading: boolean }) {
   const [range, setRange] = useState<Range>("1M");
   const { ms } = RANGES[range];
   const legKey = legs.map((l) => `${l.market}:${l.amount}`).join();
   const hist = useAsync(loading ? null : `pf:${legKey}:${range}`, async () => {
     const now = Date.now();
-    const series = await Promise.all(legs.map((l) => getPriceSeries(marketOf(l.market)!.history!, ms === null ? "2000-01-01" : dayOf(now - ms))));
+    const key = (m: string) => marketOf(m)?.history;
+    const series = await Promise.all(legs.map((l) => (key(l.market) ? getPriceSeries(key(l.market)!, ms === null ? "2000-01-01" : dayOf(now - ms)) : [])));
     return { now, series: series.map(toPoints) };
   });
-  const series = hist.data ? holdingsSeries(legs.map((l, i) => ({ amount: l.amount, points: hist.data!.series[i] })), flat, hist.data.now, total) : [];
-  // nothing price-sensitive held: value is flat over the range
-  const points = series.length === 1 && legs.length === 0 ? [{ t: series[0].t - (ms ?? 30 * 86400e3), v: total }, ...series] : series;
+  const series = hist.data ? holdingsSeries(legs.map((l, i) => ({ ...l, points: hist.data!.series[i] })), flat, hist.data.now) : [];
+  // no price history for anything held: value is flat over the range
+  const points = series.length === 1 ? [{ t: series[0].t - (ms ?? 30 * 86400e3), v: total }, ...series] : series;
   const first = points[0]?.v ?? total;
   const diff = total - first;
   const up = diff >= 0;

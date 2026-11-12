@@ -11,18 +11,18 @@ export const RANGES = {
 export type Range = keyof typeof RANGES;
 
 // Today's holdings marked at each past close (legs forward-filled, back-filled with their first open); flat = stables etc.
-export function holdingsSeries(legs: { amount: number; points: Point[] }[], flat: number, now: number, live: number) {
-  const withData = legs.filter((l) => l.points.length);
-  const times = [...new Set(withData.flatMap((l) => l.points.map((c) => c.t)))].filter((t) => t < now).sort((a, b) => a - b);
-  const cur = withData.map(() => 0);
-  const px = withData.map((l) => l.points[0].o ?? l.points[0].v);
+// A leg with no history stays at its live px, so every point values the same set as live = flat + Σ amount × px.
+export function holdingsSeries(legs: { amount: number; px: number; points: Point[] }[], flat: number, now: number) {
+  const times = [...new Set(legs.flatMap((l) => l.points.map((c) => c.t)))].filter((t) => t < now).sort((a, b) => a - b);
+  const cur = legs.map(() => 0);
+  const px = legs.map((l) => (l.points.length ? (l.points[0].o ?? l.points[0].v) : l.px));
   const pts = times.map((t) => {
     let v = flat;
-    withData.forEach((l, i) => {
+    legs.forEach((l, i) => {
       while (cur[i] < l.points.length && l.points[cur[i]].t <= t) px[i] = l.points[cur[i]++].v;
       v += l.amount * px[i];
     });
     return { t, v };
   });
-  return [...pts, { t: now, v: live }];
+  return [...pts, { t: now, v: legs.reduce((v, l) => v + l.amount * l.px, flat) }];
 }

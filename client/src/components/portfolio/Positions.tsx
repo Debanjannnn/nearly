@@ -67,12 +67,15 @@ export function positionPrices(p: Position, s: Strategy | undefined, priceOf: Pr
 // shortcut: venue yield accrued since the last run is not marked; read venue balances via RPC if exact value matters
 export function valueOf(p: Position, s: Strategy | undefined, priceOf: PriceOf) {
   if (!s) return null;
-  return groupsOf(p, s).reduce<number | null>((v, g) => {
-    const px = priceOf(g.token);
-    if (v === null || px === null) return null;
-    return g.legs.reduce((a, l) => a + toUnits(l.held, g.dec) * px, v);
+  return heldOf(p, s).reduce<number | null>((v, h) => {
+    const px = priceOf(h.token);
+    return v === null || px === null ? null : v + h.amount * px;
   }, 0);
 }
+
+// token units the position holds, per token symbol
+export const heldOf = (p: Position, s: Strategy) =>
+  groupsOf(p, s).map((g) => ({ token: g.token, amount: g.legs.reduce((a, l) => a + toUnits(l.held, g.dec), 0) }));
 
 const signed = (n: number) => (n >= 0 ? "text-positive" : "text-destructive");
 
