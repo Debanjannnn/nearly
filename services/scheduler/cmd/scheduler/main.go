@@ -58,7 +58,7 @@ func run() error {
 		Store:  sched.Store{DB: db},
 		Plan:   &planner.Planner{Tokens: dep.Tokens, LST: dep.Venues.Staking, LSTPool: dep.LSTPool, Q: md, SlippageBps: slip},
 		Market: md,
-		Keys:   &keys.Checker{RPC: near.New(rpcURL), ExecutorKey: execKey},
+		Keys:   &keys.Checker{RPC: near.New(rpcURL), ExecutorKey: execKey, Token: dep.Tokens[planner.Base]},
 		Exec:   &executor.Client{URL: strings.TrimRight(execURL, "/"), Secret: internal, Caller: "scheduler", HTTP: &http.Client{Timeout: executor.MaxRun}},
 		Tick:   tick,
 	}

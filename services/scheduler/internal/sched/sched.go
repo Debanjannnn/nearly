@@ -22,9 +22,10 @@ type Market interface {
 	planner.Quoter
 }
 
-// Keys tells whether the executor key is still on a sub-account.
+// Keys tells whether the executor key is still on a sub-account, and reads its base token balance.
 type Keys interface {
 	Active(ctx context.Context, account string) (bool, error)
+	Base(ctx context.Context, account string) (string, error)
 }
 
 type Runner interface {
@@ -149,7 +150,7 @@ func (s *Scheduler) fire(ctx context.Context, d Due, now time.Time) error {
 		if err != nil {
 			return err
 		}
-		j = Job{Kind: "deploy", Steps: plan.Steps, Params: map[string]any{"amount": p.Amount, "fee": plan.Fee, "held": plan.Held, "schedule_id": d.ID}}
+		j = Job{Kind: "deploy", Spend: p.Amount, Steps: plan.Steps, Params: map[string]any{"amount": p.Amount, "fee": plan.Fee, "held": plan.Held, "schedule_id": d.ID}}
 		if d.Kind == "dca" {
 			j.Kind = "dca"
 		} else {
@@ -207,7 +208,7 @@ func (s *Scheduler) fire(ctx context.Context, d Due, now time.Time) error {
 	if d.Kind == "rebalance" { // slot moves only on fire, so a late fire still waits a full interval
 		next = now.Add(time.Duration(d.Every) * time.Second)
 	}
-	execID, err := s.Store.Claim(ctx, d, next, &j)
+	execID, err := s.Store.Claim(ctx, d, next, &j, func(ctx context.Context) (string, error) { return s.Keys.Base(ctx, d.Sub) })
 	if err != nil || execID == "" {
 		return err
 	}

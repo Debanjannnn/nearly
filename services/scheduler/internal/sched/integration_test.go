@@ -74,6 +74,13 @@ func (m *fakeMarket) Quote(_ context.Context, _ uint64, in, _ string, a *big.Int
 type fakeKeys struct {
 	mu     sync.Mutex
 	active map[string]bool
+	base   string // base token ledger of every account
+}
+
+func (k *fakeKeys) Base(context.Context, string) (string, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.base, nil
 }
 
 func (k *fakeKeys) Active(_ context.Context, a string) (bool, error) {
@@ -84,15 +91,19 @@ func (k *fakeKeys) Active(_ context.Context, a string) (bool, error) {
 
 type fakeExec struct {
 	mu    sync.Mutex
-	calls []string  // execution ids
-	fail  string    // raw error for step 0; "" = all ok
-	keys  *fakeKeys // set: a failing run first drops the key, like an owner revoke landing
+	calls []string      // execution ids
+	fail  string        // raw error for step 0; "" = all ok
+	keys  *fakeKeys     // set: a failing run first drops the key, like an owner revoke landing
+	gate  chan struct{} // set: runs block until closed
 }
 
 func (f *fakeExec) Execute(_ context.Context, sub, id string, steps []planner.Step) ([]executor.Result, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, id)
 	f.mu.Unlock()
+	if f.gate != nil {
+		<-f.gate
+	}
 	out := make([]executor.Result, len(steps))
 	for i := range steps {
 		out[i] = executor.Result{Index: i, Status: "ok", TxHash: fmt.Sprint("tx", i)}
@@ -120,7 +131,7 @@ type env struct {
 }
 
 func newEnv(t *testing.T) *env {
-	e := &env{t: t, db: testDB(t), md: &fakeMarket{}, keys: &fakeKeys{active: map[string]bool{"alice.root.testnet": true}},
+	e := &env{t: t, db: testDB(t), md: &fakeMarket{}, keys: &fakeKeys{active: map[string]bool{"alice.root.testnet": true}, base: "1000000000000"},
 		ex: &fakeExec{}, now: time.Now().Truncate(time.Second)}
 	e.exec(`insert into users (account_id, sub_account, key_status) values ('alice.testnet', 'alice.root.testnet', 'active')`)
 	return e
@@ -313,5 +324,64 @@ func TestKeyGoneMidRunRevokes(t *testing.T) {
 	}
 	if n := e.count(`select count(*) from positions where state='opening'`); n != 0 {
 		t.Error("recurring buy position stuck opening")
+	}
+}
+
+const holdDef = `{"legs":[{"token":"usdc","source":"hold","weight_bps":10000}]}`
+
+// buys: a dca and a recurring buy of 10 USDC on an all-usdc-hold basket, both due.
+func (e *env) buys() {
+	basket := e.id(`insert into baskets (creator, name, definition) values ('alice.testnet','h',$1) returning id::text`, holdDef)
+	for _, k := range []string{"dca", "recurring_buy"} {
+		e.exec(`insert into schedules (account_id, basket_id, kind, params, every, next_run_at) values ('alice.testnet',$1,$2,'{"amount":"10000000"}','1 hour',$3)`,
+			basket, k, e.now.Add(-time.Second))
+	}
+}
+
+// Ledger is all another position's hold leg: each buy spends its slot on one failed run, no spend, no retry spam.
+func TestBuySkipsWhenOnlyHoldTokensLeft(t *testing.T) {
+	e := newEnv(t)
+	e.buys()
+	e.exec(`insert into positions (account_id, basket_id, deposit, state, held) select 'alice.testnet', id, '100000000', 'open', '["100000000"]' from baskets`)
+	e.keys.base = "100000005"
+	s := e.sched()
+	for range 3 {
+		s.Once(context.Background(), e.now)
+		s.Wait()
+	}
+	if n := e.ex.n(); n != 0 {
+		t.Fatalf("executor calls = %d, want 0", n)
+	}
+	if n := e.count(`select count(*) from executions where status='failed' and error='insufficient_balance' and position_id is null`); n != 2 {
+		t.Errorf("skipped executions = %d, want 2", n)
+	}
+	if n := e.count(`select count(*) from positions`); n != 1 {
+		t.Error("skipped buy opened a position")
+	}
+	if n := e.count(`select count(*) from schedules where next_run_at <= $1`, e.now); n != 0 {
+		t.Error("skipped slots must advance")
+	}
+}
+
+// 15 USDC, two 10 USDC buys due at once on two instances: the in-flight one reserves its amount.
+func TestConcurrentBuysDontOverspend(t *testing.T) {
+	e := newEnv(t)
+	e.buys()
+	e.keys.base = "15000000"
+	e.ex.gate = make(chan struct{})
+	a, b := e.sched(), e.sched()
+	var wg sync.WaitGroup
+	for _, s := range []*Scheduler{a, b} {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.Once(context.Background(), e.now) }()
+	}
+	wg.Wait()
+	running := e.count(`select count(*) from executions where status='running'`)
+	short := e.count(`select count(*) from executions where error='insufficient_balance'`)
+	close(e.ex.gate)
+	a.Wait()
+	b.Wait()
+	if running != 1 || short != 1 {
+		t.Fatalf("running = %d, short = %d, want 1 and 1", running, short)
 	}
 }

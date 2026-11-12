@@ -1,4 +1,4 @@
-// Package keys checks on chain that the executor key is still on a user's account.
+// Package keys checks on chain that the executor key is still on a user's account, and its base balance.
 package keys
 
 import (
@@ -12,6 +12,13 @@ import (
 type Checker struct {
 	RPC         *near.Client
 	ExecutorKey string // "ed25519:..."
+	Token       string // base token contract
+}
+
+// Base is the account's ft_balance_of of the base token.
+func (c *Checker) Base(ctx context.Context, account string) (string, error) {
+	var b string
+	return b, c.RPC.View(ctx, c.Token, "ft_balance_of", map[string]string{"account_id": account}, &b)
 }
 
 // Active is false once the owner deleted the executor key (or the account is gone).

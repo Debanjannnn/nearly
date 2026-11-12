@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
+	"github.com/Debanjannnn/nearly/internal/shared/funds"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 	"github.com/Debanjannnn/nearly/internal/shared/sweep"
 )
@@ -72,13 +73,16 @@ type Job struct {
 	PositionID string   // rebalance target; "" otherwise
 	Held       []string // rebalance: held the plan was built on; changed since = skip
 	Open       string   // recurring buy: deposit atoms of the position this deploy opens
+	Spend      string   // dca + recurring buy: base atoms that must be free
 	Params     map[string]any
 	Steps      []planner.Step
 }
 
 // Claim takes slot d.Next by moving next_run_at to next, and inserts the job's execution, in one tx.
 // execID "" means another instance won the slot or the position got busy: nothing to run.
-func (p Store) Claim(ctx context.Context, d Due, next time.Time, j *Job) (execID string, err error) {
+// funds.ErrShort: the slot is spent on a failed insufficient_balance execution, like a run the chain refused.
+func (p Store) Claim(ctx context.Context, d Due, next time.Time, j *Job, base func(context.Context) (string, error)) (execID string, err error) {
+	short := false
 	err = pgx.BeginFunc(ctx, p.DB, func(tx pgx.Tx) error {
 		if j.PositionID != "" {
 			// same row lock as the api withdraw claim, so the two never overlap
@@ -95,6 +99,16 @@ from positions where id=$1 and state='open' and held=$2::jsonb for update`, j.Po
 		t, err := tx.Exec(ctx, `update schedules set next_run_at=$2 where id=$1 and active and next_run_at=$3`, d.ID, next, d.Next)
 		if err != nil || t.RowsAffected() == 0 {
 			return err
+		}
+		if j.Spend != "" {
+			if err := funds.Reserve(ctx, tx, d.Account, j.Spend, base); errors.Is(err, funds.ErrShort) {
+				short = true
+				_, err = tx.Exec(ctx, `insert into executions (account_id, kind, status, params, error) values ($1,$2,'failed',$3,$4)`,
+					d.Account, j.Kind, j.Params, funds.ErrShort.Error())
+				return err
+			} else if err != nil {
+				return err
+			}
 		}
 		if j.Open != "" {
 			if err := tx.QueryRow(ctx, `insert into positions (account_id, basket_id, deposit) values ($1,$2,$3) returning id::text`,
@@ -113,6 +127,9 @@ returning id::text`, d.Account, j.PositionID, j.Kind, j.Params).Scan(&execID); e
 		}
 		return nil
 	})
+	if err == nil && short {
+		err = funds.ErrShort
+	}
 	if err != nil {
 		execID = ""
 	}
