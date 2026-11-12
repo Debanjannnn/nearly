@@ -108,6 +108,7 @@ func (f *fakeChain) Live(context.Context, string, []planner.Step) (planner.Live,
 type fakeExec struct {
 	mu     sync.Mutex
 	failAt int
+	errMsg string // raw failure text; "" = venue_reverted
 	calls  [][]planner.Step
 }
 
@@ -120,12 +121,15 @@ func (f *fakeExec) handler(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&in)
 	f.mu.Lock()
 	f.calls = append(f.calls, in.Steps)
-	failAt := f.failAt
+	failAt, msg := f.failAt, f.errMsg
 	f.mu.Unlock()
+	if msg == "" {
+		msg = "venue_reverted"
+	}
 	var res []executor.Result
 	for i := range in.Steps {
 		if i == failAt {
-			res = append(res, executor.Result{Index: i, Status: "failed", Error: "venue_reverted"})
+			res = append(res, executor.Result{Index: i, Status: "failed", Error: msg})
 			break
 		}
 		res = append(res, executor.Result{Index: i, Status: "ok", TxHash: fmt.Sprintf("tx%d", i)})
@@ -424,6 +428,33 @@ func TestSchedulesRevoke(t *testing.T) {
 	e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000"}, 409)
 	e.do("DELETE", "/api/v1/me/schedules/"+sid, tok, nil, 200)
 	e.do("DELETE", "/api/v1/me/schedules/"+sid, tok, nil, 404)
+}
+
+// Owner revoked on chain without calling /me/revoke: a run hitting AccessKeyNotFound stops schedules itself.
+func TestKeyGoneMidRunRevokes(t *testing.T) {
+	e := setup(t)
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, basket, 201)["id"].(string)
+	in := map[string]any{"kind": "dca", "basket_id": bid, "params": map[string]string{"amount": "1000000"}, "every_seconds": 60}
+	sid := e.do("POST", "/api/v1/me/schedules", tok, in, 201)["id"].(string)
+	e.chain.mu.Lock()
+	e.chain.execOn["alice.testnet.factory.t"] = false
+	e.chain.mu.Unlock()
+	e.exec.failAt = 0
+	e.exec.errMsg = `rpc: {"data":{"TxExecutionError":{"InvalidTxError":{"InvalidAccessKeyError":{"AccessKeyNotFound":{"account_id":"alice.testnet.factory.t"}}}}},"name":"HANDLER_ERROR"}`
+	out := e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000000"}, 202)
+	e.srv.Wait()
+	if pos := e.position(tok, out["position_id"].(string)); pos["state"] != "closed" {
+		t.Fatal(pos)
+	}
+	x := e.do("GET", "/api/v1/me/executions/"+out["execution_id"].(string), tok, nil, 200)
+	if x["status"] != "failed" || x["error"] != "executor_revoked" || x["steps"].([]any)[0].(map[string]any)["error"] != "executor_revoked" {
+		t.Fatal(x)
+	}
+	if s := e.do("GET", "/api/v1/me/schedules/"+sid, tok, nil, 200); s["active"] != false {
+		t.Fatal(s)
+	}
+	e.do("POST", "/api/v1/me/baskets/"+bid+"/deploy", tok, map[string]string{"amount": "1000000"}, 409)
 }
 
 // A deploy killed mid-run is swept to withdrawing; the owner's withdraw unwinds what is live.
