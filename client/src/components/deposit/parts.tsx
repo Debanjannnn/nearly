@@ -7,7 +7,7 @@ import { NETWORK, txUrl } from "@/lib/config";
 import { intentStatus, isDone, tokenLogos, txHash, txLink, type Intent, type IntentToken } from "@/lib/intents";
 import { useSession } from "@/lib/session";
 import { fmtUnits, parseAmount, TOKENS, type Token } from "@/lib/tokens";
-import { cn } from "@/lib/utils";
+import { cn, decimalInput } from "@/lib/utils";
 import { Button, ErrorBox } from "@/components/ui";
 import { EASE } from "@/components/motion";
 import { ProtocolIcon } from "@/components/ProtocolIcon";
@@ -259,7 +259,7 @@ export function TestnetForm({ verb, note, balanceOf, txs, onDone }: { verb: stri
           <input
             autoFocus
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setAmount(v); }}
             inputMode="decimal"
             placeholder="0"
             aria-label={`Amount to ${verb.toLowerCase()}`}

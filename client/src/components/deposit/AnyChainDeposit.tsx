@@ -23,7 +23,7 @@ import {
 } from "@/lib/intents";
 import { useSession } from "@/lib/session";
 import { parseAmount, type Token } from "@/lib/tokens";
-import { cn } from "@/lib/utils";
+import { cn, decimalInput } from "@/lib/utils";
 import { Button, ErrorBox, Row, Skeleton } from "@/components/ui";
 import { Chip, CopyField, fc, Field, inputCls, IntentDialog, IntentIcon, More, register, TestnetForm, TGAS, Trail, useIntent } from "./parts";
 
@@ -148,7 +148,7 @@ export function AnyChainDeposit({ need, onClose, onArrived }: { need?: number; o
               <input
                 autoFocus
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setAmount(v); }}
                 inputMode="decimal"
                 placeholder="0"
                 aria-label="USDC to receive"

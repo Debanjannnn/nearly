@@ -1,5 +1,6 @@
 "use client";
 
+import { decimalInput } from "@/lib/utils";
 import { useState } from "react";
 import { useDebounced } from "@/lib/hooks";
 import { ArrowDown } from "lucide-react";
@@ -111,7 +112,7 @@ export function MarketPanel({ market, holdings, onDone }: { market: MarketDef; h
           <div className="mt-2 flex items-center gap-3">
             <input
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => { const v = decimalInput(e.target.value); if (v !== null) setAmount(v); }}
               inputMode="decimal"
               aria-label={`Amount in ${inTok.symbol}`}
               placeholder="0"
