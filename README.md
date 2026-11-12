@@ -75,7 +75,7 @@ flowchart TD
   U -->|NEP-413 sign-in| C[client · Next.js]
   U -->|signs create_account| F[factory contract]
   C --> API[api · Go]
-  API --> S[⏱scheduler · Go]
+  API --> S[scheduler · Go]
   API --> M[market-data + history · Go]
   API <-->|any-chain in/out| I[NEAR Intents 1Click]
   S --> X[executor · Rust<br/>function-call key]
