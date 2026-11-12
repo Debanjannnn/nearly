@@ -1,6 +1,6 @@
 //! Per-user account contract. Holds funds; the executor moves them only within the on-chain policy.
 use near_sdk::json_types::U128;
-use near_sdk::store::IterableMap;
+use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{near, AccountId, BorshStorageKey, PanicOnDefault, PublicKey};
 
 mod events;
@@ -32,6 +32,8 @@ pub struct Policy {
     /// token -> per-step cap; a token is whitelisted iff it has a cap.
     pub caps: Vec<(AccountId, U128)>,
     pub near_cap: U128,
+    /// executor may move at most `daily_steps` × cap per token per UTC day
+    pub daily_steps: u32,
 }
 
 #[near]
@@ -40,7 +42,10 @@ enum Key {
     Caps,
     Balances,
     Positions,
+    Spent,
 }
+
+pub(crate) const DEFAULT_DAILY_STEPS: u32 = 10;
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -54,6 +59,9 @@ pub struct Contract {
     near_cap: u128,
     balances: IterableMap<AccountId, u128>,
     positions: IterableMap<String, u128>,
+    daily_steps: u32,
+    /// token (or "near") -> (UTC day, amount moved by the executor that day)
+    spent: LookupMap<String, (u64, u128)>,
 }
 
 #[near]
@@ -77,6 +85,8 @@ impl Contract {
             near_cap: near_cap.0,
             balances: IterableMap::new(Key::Balances),
             positions: IterableMap::new(Key::Positions),
+            daily_steps: DEFAULT_DAILY_STEPS,
+            spent: LookupMap::new(Key::Spent),
         };
         for (token, cap) in tokens {
             c.add_token(token, cap.0);
@@ -103,6 +113,7 @@ impl Contract {
                 .map(|(t, c)| (t.clone(), U128(*c)))
                 .collect(),
             near_cap: U128(self.near_cap),
+            daily_steps: self.daily_steps,
         }
     }
 

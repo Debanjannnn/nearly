@@ -287,6 +287,57 @@ fn owner_edits_policy() {
     assert_eq!(p.near_cap, U128(7));
 }
 
+fn executor_on_day(day: u64) {
+    let mut b = ctx(ME, exec_pk(), 0);
+    b.block_timestamp(day * 86_400 * 1_000_000_000);
+    testing_env!(b.build());
+}
+
+fn fee(c: &mut Contract, amount: u128) {
+    c.execute_step(Step::Fee {
+        token: acc(USDC),
+        amount: U128(amount),
+    });
+}
+
+#[test]
+#[should_panic(expected = "over daily cap")]
+fn over_daily_cap_rejected() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.set_daily_steps(2);
+    executor_on_day(1);
+    fee(&mut c, 1_000);
+    fee(&mut c, 1_000);
+    fee(&mut c, 1);
+}
+
+#[test]
+fn daily_cap_resets_next_day() {
+    let mut c = setup();
+    set("alice.testnet", other_pk(), 1);
+    c.set_daily_steps(1);
+    executor_on_day(1);
+    fee(&mut c, 1_000);
+    executor_on_day(2);
+    fee(&mut c, 1_000);
+    assert_eq!(bal(&c, USDC), 0);
+}
+
+#[test]
+#[should_panic(expected = "only owner")]
+fn daily_steps_only_owner() {
+    let mut c = setup();
+    set("mallory.testnet", other_pk(), 1);
+    c.set_daily_steps(100);
+}
+
+#[test]
+fn policy_shows_daily_steps() {
+    let c = setup();
+    assert_eq!(c.get_policy().daily_steps, crate::DEFAULT_DAILY_STEPS);
+}
+
 #[test]
 fn no_step_can_name_a_receiver() {
     let with_receiver =
