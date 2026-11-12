@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fmtUnits, parseAmount } from "./tokens";
+import { fmtUnits, parseAmount, withLive } from "./tokens";
 
 assert.equal(fmtUnits(0n, 6), "0");
 assert.equal(fmtUnits(1_234_567_890n, 6), "1,234.5678");
@@ -16,5 +16,10 @@ assert.equal(parseAmount("", 6), null);
 assert.equal(parseAmount(".", 6), null);
 assert.equal(parseAmount("-1", 6), null);
 assert.equal(parseAmount("1e3", 6), null);
+
+assert.deepEqual(withLive([3.58, 3.59], 13.91, true), [3.58, 3.59, 13.91]);
+assert.deepEqual(withLive([3.58, 3.59], 13.91, false), [3.58, 3.59]);
+assert.deepEqual(withLive([3.58], null, true), [3.58]);
+assert.deepEqual(withLive([], 13.91, true), []);
 
 console.log("tokens ok");
