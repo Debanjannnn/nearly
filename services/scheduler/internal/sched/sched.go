@@ -94,6 +94,18 @@ func (s *Scheduler) Once(ctx context.Context, now time.Time) {
 	}
 }
 
+// keyGone stops every schedule once a run hit a missing executor key and the chain confirms it.
+func (s *Scheduler) keyGone(ctx context.Context, account, sub string) {
+	if on, err := s.Keys.Active(ctx, sub); err != nil || on {
+		slog.Warn("auto revoke skipped", "account", account, "key_on", on, "err", err)
+		return
+	}
+	slog.Info("executor key gone mid-run, stopping schedules", "account", account)
+	if err := s.Store.Revoke(ctx, account); err != nil {
+		slog.Error("revoke", "account", account, "err", err)
+	}
+}
+
 // NextRun is the first next+k*every strictly after now (k>=1); missed slots are skipped, not backfilled.
 func NextRun(next time.Time, every int64, now time.Time) time.Time {
 	iv := time.Duration(every) * time.Second
@@ -200,7 +212,7 @@ func (s *Scheduler) fire(ctx context.Context, d Due, now time.Time) error {
 		return err
 	}
 	slog.Info("fired", "schedule", d.ID, "kind", d.Kind, "execution", execID)
-	s.run(d.Sub, execID, j.Steps, after)
+	s.run(d.Account, d.Sub, execID, j.Steps, after)
 	return nil
 }
 
@@ -259,7 +271,7 @@ func (s *Scheduler) feeRow(execID, amount, creator, me string) *Fee {
 }
 
 // run hands the steps to the executor and records the outcome; executor down = failed.
-func (s *Scheduler) run(sub, execID string, steps []planner.Step, after func(ctx context.Context, execID string, done int, ok bool)) {
+func (s *Scheduler) run(account, sub, execID string, steps []planner.Step, after func(ctx context.Context, execID string, done int, ok bool)) {
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
@@ -269,6 +281,9 @@ func (s *Scheduler) run(sub, execID string, steps []planner.Step, after func(ctx
 		// own ctx: an executor timeout must not leave the run stuck in 'running'
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if executor.Tidy(execID, results) {
+			s.keyGone(ctx, account, sub)
+		}
 		done, msg := 0, ""
 		for _, r := range results {
 			if r.Status != "ok" || r.Index != done {

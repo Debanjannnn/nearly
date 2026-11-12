@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
+	"log/slog"
 	"net/http"
 
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
@@ -149,6 +151,22 @@ func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := s.Store.Revoke(ctx, me)
 	reply(w, "revoke", map[string]any{"key_status": "revoked", "schedules_deactivated": n}, err)
+}
+
+// keyGone does what /me/revoke does once a run hit a missing executor key, so schedules stop
+// even if the client never called it.
+func (s *Server) keyGone(ctx context.Context, me, sub string) {
+	on, err := s.Chain.ExecutorKeyActive(ctx, sub)
+	if err != nil || on {
+		slog.Warn("auto revoke skipped", "account", me, "key_on", on, "err", err)
+		return
+	}
+	n, err := s.Store.Revoke(ctx, me)
+	if err != nil {
+		slog.Error("auto revoke", "account", me, "err", err)
+		return
+	}
+	slog.Info("executor key gone on chain, revoked", "account", me, "schedules_deactivated", n)
 }
 
 func (s *Server) holdings(w http.ResponseWriter, r *http.Request) {

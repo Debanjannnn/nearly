@@ -47,7 +47,7 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fee := s.feeRow(plan, b.Creator, me)
-	s.run(execID, sub, plan.Steps, func(ctx context.Context, done int, ok bool) {
+	s.run(execID, me, sub, plan.Steps, func(ctx context.Context, done int, ok bool) {
 		if done == 0 {
 			fee = nil // fee step is first; nothing paid
 		}
@@ -141,7 +141,7 @@ func (s *Server) withdraw(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]any{"position_id": pid, "steps": []planner.Step{}})
 		return
 	}
-	s.run(execID, sub, steps, func(ctx context.Context, _ int, ok bool) {
+	s.run(execID, me, sub, steps, func(ctx context.Context, _ int, ok bool) {
 		if err := s.Store.SettleWithdraw(ctx, pid, ok, params.HeldAfter); err != nil {
 			slog.Error("settle withdraw", "position", pid, "err", err)
 		}
@@ -150,7 +150,7 @@ func (s *Server) withdraw(w http.ResponseWriter, r *http.Request) {
 }
 
 // run sends steps to the executor in the background, records results, then calls after.
-func (s *Server) run(execID, sub string, steps []planner.Step, after func(ctx context.Context, done int, ok bool)) {
+func (s *Server) run(execID, me, sub string, steps []planner.Step, after func(ctx context.Context, done int, ok bool)) {
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
@@ -160,6 +160,9 @@ func (s *Server) run(execID, sub string, steps []planner.Step, after func(ctx co
 		// own ctx: an executor timeout must not leave the run stuck in 'running'
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		if executor.Tidy(execID, results) {
+			s.keyGone(ctx, me, sub)
+		}
 		done, msg := 0, ""
 		for _, res := range results {
 			if res.Status != "ok" || res.Index != done {

@@ -84,16 +84,26 @@ func (k *fakeKeys) Active(_ context.Context, a string) (bool, error) {
 
 type fakeExec struct {
 	mu    sync.Mutex
-	calls []string // execution ids
+	calls []string  // execution ids
+	fail  string    // raw error for step 0; "" = all ok
+	keys  *fakeKeys // set: a failing run first drops the key, like an owner revoke landing
 }
 
-func (f *fakeExec) Execute(_ context.Context, _, id string, steps []planner.Step) ([]executor.Result, error) {
+func (f *fakeExec) Execute(_ context.Context, sub, id string, steps []planner.Step) ([]executor.Result, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, id)
 	f.mu.Unlock()
 	out := make([]executor.Result, len(steps))
 	for i := range steps {
 		out[i] = executor.Result{Index: i, Status: "ok", TxHash: fmt.Sprint("tx", i)}
+	}
+	if f.fail != "" {
+		if f.keys != nil {
+			f.keys.mu.Lock()
+			f.keys.active[sub] = false
+			f.keys.mu.Unlock()
+		}
+		out = []executor.Result{{Index: 0, Status: "failed", Error: f.fail}}
 	}
 	return out, nil
 }
@@ -276,5 +286,32 @@ func TestRevokeStopsEverything(t *testing.T) {
 	s.Wait()
 	if n := e.ex.n(); n != 0 {
 		t.Fatalf("calls = %d after revoke", n)
+	}
+}
+
+// Key revoked on chain between the tick's key check and signing: the failed run stops every schedule.
+func TestKeyGoneMidRunRevokes(t *testing.T) {
+	e := newEnv(t)
+	e.seed()
+	e.exec(`update schedules set active = kind <> 'rebalance'`)
+	e.ex.fail = `rpc: {"cause":{"name":"INVALID_TRANSACTION"},"data":{"TxExecutionError":{"InvalidTxError":{"InvalidAccessKeyError":{"AccessKeyNotFound":{}}}}}}`
+	e.ex.keys = e.keys
+	s := e.sched()
+	s.Once(context.Background(), e.now)
+	s.Wait()
+	if n := e.count(`select count(*) from executions where status='failed' and error='executor_revoked'`); n != 2 {
+		t.Errorf("revoked executions = %d, want 2", n)
+	}
+	if n := e.count(`select count(*) from execution_steps where error like '%rpc%'`); n != 0 {
+		t.Error("raw rpc error stored")
+	}
+	if n := e.count(`select count(*) from schedules where active`); n != 0 {
+		t.Errorf("active schedules = %d, want 0", n)
+	}
+	if n := e.count(`select count(*) from users where key_status='revoked'`); n != 1 {
+		t.Error("user must be marked revoked")
+	}
+	if n := e.count(`select count(*) from positions where state='opening'`); n != 0 {
+		t.Error("recurring buy position stuck opening")
 	}
 }

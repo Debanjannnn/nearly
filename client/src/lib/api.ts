@@ -271,6 +271,7 @@ const COPY: Record<string, string> = {
 // user-facing text: known code → copy (+ detail), else raw message
 export const errText = (e: unknown): string => {
   const m = errMsg(e);
+  if (/^(rpc: )?\{/.test(m)) return "Transaction failed on chain."; // old rows stored raw rpc json
   const d = e instanceof ApiError && e.detail ? ` (${e.detail})` : "";
   return (COPY[m] ?? m) + d;
 };
