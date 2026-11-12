@@ -399,6 +399,41 @@ func TestHoldLegsNotFree(t *testing.T) {
 	e.srv.Wait()
 }
 
+// two deploys of the whole free balance at once: the account lock + opening reservation let one through
+func TestConcurrentDeploysDontOverspend(t *testing.T) {
+	e := setup(t)
+	tok := e.onboard("alice.testnet")
+	bid := e.do("POST", "/api/v1/me/baskets", tok, map[string]any{"name": "hold", "definition": map[string]any{"legs": []map[string]any{
+		{"token": "usdc", "source": "hold", "weight_bps": 10000},
+	}}}, 201)["id"].(string)
+	e.chain.mu.Lock()
+	e.chain.bals = map[string]string{"usdc": "100000000"}
+	e.chain.mu.Unlock()
+	codes := make(chan int, 2)
+	for range 2 {
+		go func() {
+			b, _ := json.Marshal(map[string]string{"amount": "100000000"})
+			req, _ := http.NewRequest("POST", e.http.URL+"/api/v1/me/baskets/"+bid+"/deploy", bytes.NewReader(b))
+			req.Header.Set("Authorization", "Bearer "+tok)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				codes <- 0
+				return
+			}
+			res.Body.Close()
+			codes <- res.StatusCode
+		}()
+	}
+	got := map[int]int{}
+	for range 2 {
+		got[<-codes]++
+	}
+	e.srv.Wait()
+	if got[202] != 1 || got[422] != 1 {
+		t.Fatal(got)
+	}
+}
+
 func jsonStr(v any) string { b, _ := json.Marshal(v); return string(b) }
 
 func TestWithdrawResumeLSTPool(t *testing.T) {
@@ -505,7 +540,8 @@ func TestSweptDeployRecovers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pid, xid, err := e.srv.Store.OpenPosition(ctx, "alice.testnet", bid, ExecParams{Amount: "1000000000", Held: plan.Held}, plan.Steps)
+	pid, xid, err := e.srv.Store.OpenPosition(ctx, "alice.testnet", bid, ExecParams{Amount: "1000000000", Held: plan.Held}, plan.Steps,
+		func(context.Context) (string, error) { return "1000000000", nil })
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Debanjannnn/nearly/internal/shared/executor"
+	"github.com/Debanjannnn/nearly/internal/shared/funds"
 	"github.com/Debanjannnn/nearly/internal/shared/httpx"
 	"github.com/Debanjannnn/nearly/internal/shared/planner"
 	"github.com/Debanjannnn/nearly/internal/shared/sweep"
@@ -32,16 +33,6 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		b, err = s.Store.Basket(ctx, bid, me)
 	}
-	var bals map[string]string
-	if err == nil {
-		bals, err = s.free(ctx, me, sub)
-	}
-	if err == nil {
-		amt, _ := new(big.Int).SetString(in.Amount, 10)
-		if have, ok := new(big.Int).SetString(bals[planner.Base], 10); !ok || amt.Cmp(have) > 0 {
-			err = ErrInsufficient // other positions' hold legs are not spendable
-		}
-	}
 	var plan planner.Plan
 	if err == nil {
 		plan, err = s.Plan.Deploy(ctx, b.Definition, in.Amount)
@@ -51,7 +42,16 @@ func (s *Server) deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := ExecParams{Amount: in.Amount, Fee: plan.Fee, Held: plan.Held}
-	posID, execID, err := s.Store.OpenPosition(ctx, me, bid, params, plan.Steps)
+	posID, execID, err := s.Store.OpenPosition(ctx, me, bid, params, plan.Steps, func(ctx context.Context) (string, error) {
+		bals, err := s.Chain.Balances(ctx, sub)
+		if err != nil {
+			return "", rpc("ft_balance_of", err)
+		}
+		return bals[planner.Base], nil
+	})
+	if errors.Is(err, funds.ErrShort) {
+		err = ErrInsufficient // other positions' hold legs and in-flight buys are not spendable
+	}
 	if err != nil {
 		fail(w, "open position", err)
 		return
