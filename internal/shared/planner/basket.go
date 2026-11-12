@@ -13,6 +13,8 @@ const (
 	Base    = "usdc" // deposits and fees are in this token
 	FeeBps  = 40     // open fee to treasury
 	MaxLegs = 8
+	// MinStake: dust guard on the staking leg, wNEAR atoms (0.01 NEAR, smallest LiNEAR stake tested)
+	MinStake = "10000000000000000000000"
 )
 
 // Leg is one token x source with its share of the basket. A non-base token is bought via

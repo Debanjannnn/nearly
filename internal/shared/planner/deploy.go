@@ -5,6 +5,8 @@ import (
 	"math/big"
 )
 
+var minStake, _ = new(big.Int).SetString(MinStake, 10)
+
 // Deploy opens a position with amount base atoms: fee to treasury first, one swap per non-base
 // token (Rhea pool), then supply/stake per leg.
 func (p *Planner) Deploy(ctx context.Context, b Basket, amount string) (Plan, error) {
@@ -33,6 +35,9 @@ func (p *Planner) Deploy(ctx context.Context, b Basket, amount string) (Plan, er
 		return Plan{}, err
 	}
 	for i, l := range b.Legs {
+		if l.Source == SourceStaking && held[i].Sign() > 0 && held[i].Cmp(minStake) < 0 {
+			return Plan{}, fail("amount_too_small", "staking leg gets %s wNEAR atoms, min %s", held[i], MinStake)
+		}
 		steps = append(steps, p.put(l, held[i])...)
 	}
 	return Plan{Steps: steps, Fee: fee.String(), Held: strs(held)}, nil

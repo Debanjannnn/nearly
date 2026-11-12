@@ -80,6 +80,11 @@ func TestDeploy(t *testing.T) {
 	if _, err := newP().Deploy(context.Background(), basket, "-1"); err == nil {
 		t.Fatal("negative amount")
 	}
+	// 0.01 USDC: staking leg lands under 0.01 NEAR, refused before any step runs
+	var pe *Error
+	if _, err := newP().Deploy(context.Background(), basket, "10000"); !errors.As(err, &pe) || pe.Code != "amount_too_small" {
+		t.Fatalf("dust stake: %v", err)
+	}
 }
 
 func TestWithdrawPartial(t *testing.T) {
