@@ -38,6 +38,19 @@ func TestVerify(t *testing.T) {
 	}
 }
 
+// Real `near message sign-nep413` output (testnet dev account): CLI prints ed25519:<base58>.
+func TestVerifyCLIFormat(t *testing.T) {
+	nonce, _ := base64.StdEncoding.DecodeString("bCTyICW/qPLQQ4r9biBeqtQ6Ti4MvJuQeUZpXTfyDus=")
+	pk := "ed25519:2kMRH5ptTBkouMpPZSoKckYxhA41kJGgm65STTGd432E"
+	sig := "ed25519:5LDEiznVcsriFxyiz4BdqLFFThTddckRReeA9p1EUJyukWMcz1LQUdgfJLveCpPL9X443yVznffe4n37d6iy4srD"
+	if err := Verify(pk, sig, nonce); err != nil {
+		t.Fatal(err)
+	}
+	if Verify(pk, sig[:len(sig)-1]+"x", nonce) != ErrSignature {
+		t.Fatal("tampered cli sig accepted")
+	}
+}
+
 // Borsh layout per NEP-413: tag 2^31+413 LE, len-prefixed strings, raw 32-byte nonce, None byte.
 func TestHashLayout(t *testing.T) {
 	nonce := make([]byte, 32)
