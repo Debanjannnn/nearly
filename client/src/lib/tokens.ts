@@ -52,6 +52,13 @@ export const LISTED = MARKETS;
 // history closes are mainnet (DefiLlama); testnet live prices come from Ref testnet pools, so never mix them
 export const LIVE_MATCHES_HISTORY = NETWORK === "mainnet";
 export const withLive = (closes: number[], live: number | null, same = LIVE_MATCHES_HISTORY) => (same && live !== null && closes.length ? [...closes, live] : closes);
+// testnet: scale mainnet bars so the last close equals the live price (% moves unchanged)
+export function anchor<P extends { v: number; o?: number; h?: number; l?: number }>(pts: P[], live: number | null, same = LIVE_MATCHES_HISTORY): P[] {
+  const last = pts.at(-1)?.v;
+  if (same || live === null || !last) return pts;
+  const k = live / last;
+  return pts.map((p) => ({ ...p, v: p.v * k, ...(p.o !== undefined && { o: p.o * k }), ...(p.h !== undefined && { h: p.h * k }), ...(p.l !== undefined && { l: p.l * k }) }));
+}
 
 // bigint-safe: rounds down to maxFrac digits, groups thousands
 export function fmtUnits(raw: bigint | string, decimals: number, maxFrac = 4): string {
