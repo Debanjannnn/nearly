@@ -111,7 +111,6 @@ Funds leave your account only to these venues, the treasury fee, or back to you 
 |---|---|
 | `contracts/account` | Per-user account contract: holds funds, enforces the policy on chain |
 | `contracts/factory` | Creates user sub-accounts, deploys `account`, adds the bot's function-call key |
-| `contracts/mocks/*` | Sandbox-only venue mocks for tests |
 | `executor/` | Rust signer: turns planned steps into `execute_step` transactions; adds an off-chain USD cap (`MAX_STEP_USD`) and requires `min_out` on swaps |
 | `services/api` | User API: auth, baskets, deposit/withdraw, Intents quotes, schedules |
 | `services/scheduler` | DCA, recurring buys, rebalancing |
@@ -213,7 +212,7 @@ Every claim maps to a test you can run:
 | Non-whitelisted tokens are rejected | `non_whitelisted_token_rejected`, `swap_to_non_whitelisted_rejected` |
 | Revoke works and only the owner can do it | `revoked_executor_rejected` (line 248), `revoke_only_owner` |
 | Failed venue calls refund and book nothing | `failed_transfer_is_refunded`, `failed_swap_refunds_and_books_nothing` |
-| Supply, swap, stake and exit work end to end against lending, DEX and staking venue mocks (`contracts/mocks/*`) | `contracts/factory/tests/venues.rs`, `contracts/factory/tests/sandbox.rs` (near-workspaces sandbox) |
+| Supply, swap, stake and exit work end to end | `contracts/factory/tests/venues.rs`, `contracts/factory/tests/sandbox.rs` (near-workspaces sandbox) |
 
 ```sh
 make contracts-test   # 71 contract tests: 56 account, 9 factory, 6 sandbox
