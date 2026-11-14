@@ -33,3 +33,7 @@ Ship low per-step caps and a low `daily_steps`. Each owner raises them for their
 ## 5. NEAR Intents 1Click
 
 1Click already runs on mainnet, so any-chain deposit and withdraw work as they are. A partner JWT removes the 0.2% fee.
+
+## 6. Native BTC and ETH legs (later)
+
+Use NEAR Chain Signatures so the account contract can hold native BTC or ETH in baskets, signed by the contract itself.
