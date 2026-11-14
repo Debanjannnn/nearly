@@ -1,0 +1,120 @@
+# Builds images on this Mac (arm64), streams them to the host over SSH, starts the stack, smoke-tests over HTTPS.
+# Run from infra/aws/ansible: ansible-playbook playbook.yml
+# Optional: -e executor_private_key=ed25519:... -e executor_public_key=ed25519:... -e intents_jwt=...
+- name: Deploy nearly
+  hosts: nearly
+  vars:
+    app_dir: /opt/nearly
+    repo_root: "{{ (playbook_dir + '/../../..') | realpath }}"
+    compose: docker compose -f docker-compose.yml -f infra/client.compose.yml -f infra/aws/compose.aws.yml
+    # compose names built images <project>-<service>; project is pinned to "nearly" in infra/client.compose.yml
+    images: nearly-api nearly-market-data nearly-scheduler nearly-history nearly-indexer nearly-executor nearly-client:aws
+  tasks:
+    - name: Build images locally (host arch must match the instance, arm64)
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.command: "{{ compose }} build"
+      args: { chdir: "{{ repo_root }}" }
+      environment: { DOMAIN: "{{ domain }}" }
+      changed_when: true
+
+    - name: Wait for cloud-init
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+
+    - name: Install Docker (get.docker.com)
+      become: true
+      ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
+      args: { creates: /usr/bin/docker }
+
+    - name: Swap file (2 GB host)
+      become: true
+      ansible.builtin.shell: |
+        fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      args: { creates: /swapfile }
+
+    - name: App dir
+      become: true
+      ansible.builtin.file: { path: "{{ app_dir }}", state: directory, owner: ubuntu, group: ubuntu, mode: "0755" }
+
+    # compose files, migrations, Caddyfile; working tree, not just HEAD. .env on the host is never sent or deleted
+    - name: Sync repo
+      ansible.posix.synchronize:
+        src: "{{ repo_root }}/"
+        dest: "{{ app_dir }}/"
+        delete: true
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=.env"
+          - "--exclude=.env.local"
+          - "--exclude=node_modules"
+          - "--exclude=.next"
+          - "--exclude=target"
+
+    - name: Ship images (docker save | ssh docker load)
+      delegate_to: localhost
+      ansible.builtin.shell: >-
+        set -o pipefail;
+        docker save {{ images }} | gzip -1 |
+        ssh -o StrictHostKeyChecking=no {{ ansible_user }}@{{ inventory_hostname }} 'gunzip | sudo docker load'
+      args: { executable: /bin/bash }
+      changed_when: true
+
+    - name: Create .env once (secrets + executor key)
+      ansible.builtin.script: files/init_env.py {{ app_dir }}
+      args: { executable: python3, creates: "{{ app_dir }}/.env" }
+
+    - name: Per-host settings
+      ansible.builtin.lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^{{ item.k }}="
+        line: "{{ item.k }}={{ item.v }}"
+      loop:
+        - { k: DOMAIN, v: "{{ domain }}" }
+        - { k: CORS_ORIGINS, v: "https://{{ domain }}" }
+      loop_control: { label: "{{ item.k }}" }
+
+    - name: Optional overrides
+      ansible.builtin.lineinfile:
+        path: "{{ app_dir }}/.env"
+        regexp: "^{{ item.k }}="
+        line: "{{ item.k }}={{ item.v }}"
+      loop:
+        - { k: EXECUTOR_PRIVATE_KEY, v: "{{ executor_private_key | default('') }}" }
+        - { k: EXECUTOR_PUBLIC_KEY, v: "{{ executor_public_key | default('') }}" }
+        - { k: INTENTS_JWT, v: "{{ intents_jwt | default('') }}" }
+      when: item.v | length > 0
+      loop_control: { label: "{{ item.k }}" }
+      no_log: true
+
+    - name: Start stack
+      become: true
+      ansible.builtin.command: "{{ compose }} up -d --no-build --wait --wait-timeout 600 --remove-orphans"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: true
+
+    - name: Executor health (internal only)
+      become: true
+      ansible.builtin.command: "{{ compose }} exec -T executor curl -fsS localhost:8083/health"
+      args: { chdir: "{{ app_dir }}" }
+      changed_when: false
+
+    # from the controller: proves DNS, TLS, Caddy routing and each service
+    - name: Public smoke test
+      delegate_to: localhost
+      ansible.builtin.uri:
+        url: "https://{{ item }}"
+      loop:
+        - "{{ domain }}/"
+        - "api.{{ domain }}/health"
+        - "md.{{ domain }}/health"
+        - "history.{{ domain }}/health"
+      retries: 12
+      delay: 10
+      register: smoke
+      until: smoke.status == 200
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: "App: https://{{ domain }}  API: https://api.{{ domain }}"
