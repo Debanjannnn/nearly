@@ -242,13 +242,7 @@ CI (`.github/workflows/ci.yml`) runs Go vet + tests (unit and integration), exec
 
 ## Path to mainnet
 
-The contracts don't depend on the network. Mainnet is a config change plus hardening:
-
-1. **Deploy config:** `contracts/deployments/mainnet.json` with the mainnet venues: Rhea lending `contract.main.burrow.near`, Rhea DEX `v2.ref-finance.near`, LiNEAR `linear-protocol.near`, wNEAR `wrap.near`, USDC `17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`. Whitelist only audited, deep pools.
-2. **Reproducible builds:** `cargo near build reproducible-wasm`, so anyone can match the deployed code hash.
-3. **Audit** of `contracts/account` (policy, 24h limit, settle callbacks) before real funds.
-4. **Conservative defaults:** low per-step caps and `daily_steps`; each owner raises them for their own account.
-5. **NEAR Intents 1Click** already runs on mainnet; a partner JWT removes the 0.2% fee.
+Testnet today. The planned steps to mainnet (venue config, reproducible builds, audit, conservative caps) are in [docs/mainnetplan.md](docs/mainnetplan.md).
 
 ## Known limits
 
