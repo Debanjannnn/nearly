@@ -1,5 +1,3 @@
-![Nearly: The Yield Bearing Basket, live on NEAR](docs/banner.png)
-
 # Nearly
 
 ![NEAR](https://img.shields.io/badge/NEAR-testnet-000000?logo=near&logoColor=white)
@@ -15,13 +13,19 @@
 
 Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. A bot runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
 
+![Nearly: The Yield Bearing Basket, live on NEAR](docs/banner.png)
+
+
 Built at NEAR HACKATHON (2026-11-01 → 2026-11-14). Tracks: **`defi`** and **`security`**.
+
+**Live app (NEAR testnet): https://nearly.veilocity.xyz**
 
 ## For judges: check it in 2 minutes
 
 No Docker or secrets needed for these:
 
 ```sh
+curl https://api.nearly.veilocity.xyz/health   # hosted backend is up (also md. and history.)
 scripts/verify-testnet.sh    # every deployed account exists and has code
 make contracts-test          # 71 contract tests: policy, caps, pools, 24h limit, fee budget, revoke, migrate, sandbox runs
 ```
@@ -58,6 +62,12 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 | keeps acting after you notice | ❌ `revoke_executor` deletes the key, so the bot can't sign at all; a contract flag (`executor revoked`) blocks it as a backup | `contracts/account/src/owner.rs:109` |
 | pays itself through treasury fees | ❌ fees are capped at 0.4% of the token's 24h limit, a constant nobody can raise | `contracts/account/src/policy.rs:54` |
 | accepts a poor price on a whitelisted pool | ⚠️ price slippage on whitelisted pools, bounded by the per-step and 24h caps (see Known limits) | — |
+
+### Limits of the bot's key
+
+- It is a function-call key for one receiver (your account) and one method (`execute_step`), with a 1 NEAR gas allowance (`contracts/factory/src/lib.rs:17`). It cannot transfer NEAR, add keys, deploy code or call any other method.
+- Your Nearly account holds no full-access key. You never get locked out: every owner method (`withdraw`, `set_*`, `revoke_executor`) checks that the caller is your wallet (`predecessor == owner`, plus 1 yoctoNEAR so it needs a full-access signature), so you act from your own wallet.
+- If the gas allowance runs out, or after `revoke_executor`, the bot simply stops. Funds stay in your account and you can still `withdraw`. Re-enabling the bot after a revoke is not supported yet.
 
 ## How NEAR is used
 
@@ -101,7 +111,6 @@ Funds leave your account only to these venues, the treasury fee, or back to you 
 |---|---|
 | `contracts/account` | Per-user account contract: holds funds, enforces the policy on chain |
 | `contracts/factory` | Creates user sub-accounts, deploys `account`, adds the bot's function-call key |
-| `contracts/mocks/*` | Sandbox-only venue mocks for tests |
 | `executor/` | Rust signer: turns planned steps into `execute_step` transactions; adds an off-chain USD cap (`MAX_STEP_USD`) and requires `min_out` on swaps |
 | `services/api` | User API: auth, baskets, deposit/withdraw, Intents quotes, schedules |
 | `services/scheduler` | DCA, recurring buys, rebalancing |
@@ -161,7 +170,9 @@ An older account, from before the pool whitelist and 24h limit, also shows a liv
 
 ## Try the app (testnet)
 
-Prerequisites: Docker, Go 1.25+, Rust + `cargo-near`, Bun, and a NEAR testnet wallet.
+Hosted: open **https://nearly.veilocity.xyz** with a NEAR testnet wallet and follow the steps below. Nothing to install.
+
+To run it locally instead you need Docker, Go 1.25+, Rust + `cargo-near`, Bun, and a NEAR testnet wallet.
 
 ```sh
 cp .env.example .env          # fill EXECUTOR_*, INTERNAL_SECRET, SESSION_SECRET, NEARLY_ROOT_ACCOUNT
@@ -174,7 +185,7 @@ Then in the app:
 
 1. **Connect your wallet**, then sign in by signing a message (no password).
    → Nearly asks you to sign the factory `create_account` transaction. Your account (for example `alice-testnet.factory.nearly-dev-c7dc68.testnet`) appears on testnet.
-2. **Go to Baskets → New** and build a mix (for example USDC lending + wNEAR staking), then click **Backtest**.
+2. **Go to Baskets → Build a basket** and build a mix (for example USDC lending + wNEAR staking), then click **Backtest**.
    → You see historical APY and a chart for that mix.
 3. **Open the basket, deposit, and deploy.**
    → The executor runs the steps. **Portfolio → Executions** lists each run with its transaction hash.
@@ -201,7 +212,7 @@ Every claim maps to a test you can run:
 | Non-whitelisted tokens are rejected | `non_whitelisted_token_rejected`, `swap_to_non_whitelisted_rejected` |
 | Revoke works and only the owner can do it | `revoked_executor_rejected` (line 248), `revoke_only_owner` |
 | Failed venue calls refund and book nothing | `failed_transfer_is_refunded`, `failed_swap_refunds_and_books_nothing` |
-| Contract against real venue contracts | `contracts/factory/tests/sandbox.rs`, `contracts/factory/tests/venues.rs` (near-workspaces sandbox) |
+| Supply, swap, stake and exit work end to end | `contracts/factory/tests/venues.rs`, `contracts/factory/tests/sandbox.rs` (near-workspaces sandbox) |
 
 ```sh
 make contracts-test   # 71 contract tests: 56 account, 9 factory, 6 sandbox
@@ -215,6 +226,7 @@ CI (`.github/workflows/ci.yml`) runs Go vet + tests (unit and integration), exec
 
 - The bot sets each swap's `min_out` from a live quote. A compromised bot could accept a worse price on a whitelisted pool, but only within the per-step and 24h limits.
 - NEAR Intents has no testnet, so live cross-chain transfers are mainnet-only. On testnet you get dry-run quotes.
+- Live APYs come from testnet venues and look odd (thin testnet Rhea markets show near-zero lending rates, LiNEAR testnet staking shows very high ones). Backtests use the historical series served by `history`, not these spot rates.
 - Perps and limit orders are out of scope.
 
 ## Built with
