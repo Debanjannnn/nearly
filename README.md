@@ -93,10 +93,13 @@ flowchart TD
   U -->|NEP-413 sign-in| C[client · Next.js]
   U -->|signs create_account| F[factory contract]
   C --> API[api · Go]
-  API --> S[scheduler · Go]
-  API --> M[market-data + history · Go]
+  C -->|prices · WebSocket| M[market-data · Go]
+  C -->|history · backtests| H[history · Go]
   API <-->|any-chain in/out| I[NEAR Intents 1Click]
-  S --> X[executor · Rust<br/>function-call key]
+  API -->|buys · withdrawals| X[executor · Rust<br/>function-call key]
+  S[scheduler · Go<br/>DCA · rebalance] -->|planned steps| X
+  S -->|quotes| M
+  M --- R[(Redis)]
   F -->|deploys + adds executor key| A[your account contract<br/>token + pool whitelist · caps · 24h limit]
   X -->|execute_step only| A
   A --> L[(Rhea lending)]
@@ -104,7 +107,10 @@ flowchart TD
   A --> ST[(LiNEAR staking)]
   A --> T[(treasury fee)]
   A -.->|events| IX[indexer · Go]
-  IX --> DB[(PostgreSQL)]
+  API --- DB[(PostgreSQL)]
+  S --- DB
+  H --- DB
+  IX --> DB
 ```
 
 Funds leave your account only to these venues, the treasury fee, or back to you (`to_owner`, `withdraw`).
