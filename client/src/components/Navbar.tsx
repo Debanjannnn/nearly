@@ -11,6 +11,7 @@ import { useCopy, useHoldings } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { BasketSearch } from "./BasketSearch";
+import { TokenIcon } from "./TokenIcon";
 import { Row, Spinner, useDismissable } from "./ui";
 import { AnyChainButton } from "@/components/deposit/AnyChainDeposit";
 import { AnyChainWithdrawButton } from "@/components/deposit/AnyChainWithdraw";
@@ -131,7 +132,7 @@ function WalletMenu() {
         {mainAddress ? shortHash(mainAddress) : "Connected"}
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-border bg-popover p-4 text-sm shadow-xl">
+        <div className="absolute right-0 top-full z-50 mt-2 w-96 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border border-border bg-popover p-4 text-sm shadow-xl">
           {!address ? (
             <Spinner label="Creating your account…" />
           ) : (
@@ -142,8 +143,8 @@ function WalletMenu() {
               </dl>
               <Wallet h={holdings} />
               <div className="flex gap-2">
-                <AnyChainButton className="flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
-                <AnyChainWithdrawButton className="flex-1 justify-center rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
+                <AnyChainButton className="flex-1 justify-center whitespace-nowrap rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
+                <AnyChainWithdrawButton className="flex-1 justify-center whitespace-nowrap rounded-lg border border-border bg-secondary/50 px-2 py-2 text-foreground hover:bg-secondary hover:no-underline" />
               </div>
               <Automation />
               {error && <p className="text-xs break-words text-destructive">{error}</p>}
@@ -188,8 +189,18 @@ function Wallet({ h }: { h: ReturnType<typeof useHoldings> }) {
   return (
     <div className="space-y-2">
       <dl className="space-y-2">
-        <Row label="Network">NEAR {NETWORK}</Row>
-        <Row label="USDC">{amt("USDC")}</Row>
+        <Row label="Network">
+          <span className="inline-flex items-center gap-1.5">
+            <TokenIcon symbol="NEAR" size={14} />
+            NEAR {NETWORK}
+          </span>
+        </Row>
+        <Row label="USDC">
+          <span className="inline-flex items-center gap-1.5">
+            <TokenIcon symbol="USDC" size={14} />
+            {amt("USDC")}
+          </span>
+        </Row>
         <Row label="NEAR (gas)">{amt("NEAR")}</Row>
       </dl>
       {h.error && <p className="text-xs text-warning">Balances unavailable: {h.error}</p>}
