@@ -1,0 +1,28 @@
+# AWS overlay on top of docker-compose.yml + infra/client.compose.yml: public HTTPS URLs for the client, plus Caddy.
+# DOMAIN comes from the env (ansible sets it). Images are built on the Mac (arm64) and shipped; the host runs --no-build.
+services:
+  client:
+    image: nearly-client:aws # separate tag so it doesn't clobber the local client image
+    build:
+      args:
+        NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
+        NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+        NEXT_PUBLIC_MARKET_DATA_URL: https://md.${DOMAIN}
+        NEXT_PUBLIC_WS_URL: wss://md.${DOMAIN}/api/v1/ws
+        NEXT_PUBLIC_HISTORY_URL: https://history.${DOMAIN}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      client: { condition: service_healthy }
+      api: { condition: service_healthy }
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./infra/aws/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+volumes:
+  caddy-data:
