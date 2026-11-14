@@ -33,6 +33,8 @@ function seriesLabel(series: string) {
 
 // equity over the backtest window + headline stats + coverage notes
 export function BacktestView({ bt, loading, error }: { bt: Backtest | null; loading: boolean; error: string | null }) {
+  // missing history is expected (e.g. staking legs), not a failure
+  if (error?.startsWith("Not enough history") || error === "no_data") return <p className="text-sm text-muted-foreground">Not enough history for this basket.</p>;
   if (error) return <ErrorBox message={errText(new Error(error))} />;
   if (!bt) return loading ? <Skeleton className="h-80 w-full" /> : <p className="text-sm text-muted-foreground">Run a backtest to see history.</p>;
   const data = bt.curve.map((p) => ({ day: p.day, usd: Number(p.usd) }));
