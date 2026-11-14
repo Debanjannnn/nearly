@@ -240,6 +240,16 @@ cd executor && cargo test
 
 CI (`.github/workflows/ci.yml`) runs Go vet + tests (unit and integration), executor tests, contract tests, a Docker build, and client typecheck + lint.
 
+## Path to mainnet
+
+The contracts don't depend on the network. Mainnet is a config change plus hardening:
+
+1. **Deploy config:** `contracts/deployments/mainnet.json` with the mainnet venues: Rhea lending `contract.main.burrow.near`, Rhea DEX `v2.ref-finance.near`, LiNEAR `linear-protocol.near`, wNEAR `wrap.near`, USDC `17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`. Whitelist only audited, deep pools.
+2. **Reproducible builds:** `cargo near build reproducible-wasm`, so anyone can match the deployed code hash.
+3. **Audit** of `contracts/account` (policy, 24h limit, settle callbacks) before real funds.
+4. **Conservative defaults:** low per-step caps and `daily_steps`; each owner raises them for their own account.
+5. **NEAR Intents 1Click** already runs on mainnet; a partner JWT removes the 0.2% fee.
+
 ## Known limits
 
 - The executor sets each swap's `min_out` from a live quote. A compromised executor could accept a worse price on a whitelisted pool, but only within the per-step and 24h limits.
