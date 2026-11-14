@@ -11,7 +11,7 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Contract tests](https://img.shields.io/badge/contract%20tests-71%20passing-2EA043)
 
-Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. A bot runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
+Nearly lets you put money into yield baskets on NEAR. You pick a mix of lending, liquidity and liquid staking. An executor runs and rebalances the basket, but it **cannot take your funds**. The rules are enforced by your own NEAR smart-contract account, not by our server.
 
 ![Nearly: The Yield Bearing Basket, live on NEAR](docs/banner.png)
 
@@ -30,28 +30,28 @@ scripts/verify-testnet.sh    # every deployed account exists and has code
 make contracts-test          # 71 contract tests: policy, caps, pools, 24h limit, fee budget, revoke, migrate, sandbox runs
 ```
 
-On chain: the [On-chain proof](#on-chain-proof-near-testnet) table lists a full testnet run, with every allowed step and every rejection linked to its transaction.
+On chain: the [On-chain proof](#on-chain-proof-near-testnet) table lists a full testnet run, with every allowed step and every rejection linked to its transaction, plus a live Rhea swap and lending supply signed by the executor key.
 
 | Track | What to look at |
 |---|---|
 | `defi` | Baskets across Rhea lending, the Rhea DEX and liquid staking; backtests; deposit and withdraw from any chain via NEAR Intents 1Click |
-| `security` | The bot holds a function-call key limited to `execute_step`, and the contract checks each step: token and pool whitelists, per-step cap, **rolling 24h limit**, no free-form receiver, owner kill switch |
+| `security` | The executor holds a function-call key limited to `execute_step`, and the contract checks each step: token and pool whitelists, per-step cap, **rolling 24h limit**, no free-form receiver, owner kill switch |
 
 ## The problem
 
-Automated DeFi strategies need a bot that signs transactions. Usually that means handing it your keys or depositing into a shared vault, and either way you're trusting the operator. One bug or leaked server key and the money is gone.
+Automated DeFi strategies need a service that signs transactions for you. Usually that means handing it your keys or depositing into a shared vault, and either way you're trusting the operator. One bug or leaked server key and the money is gone.
 
 ## What Nearly does
 
 - **One account per user.** The factory creates `alice-testnet.factory.nearly-dev-c7dc68.testnet` (for `alice.testnet`), a contract account that only you own.
-- **The bot gets a function-call key, not your keys.** That key can call exactly one method, `execute_step`, with a limited gas allowance.
+- **The executor gets a function-call key, not your keys.** That key can call exactly one method, `execute_step`, with a limited gas allowance.
 - **The contract checks every step.** A step can only move whitelisted tokens into Rhea lending, whitelisted Rhea DEX pools, liquid staking, the treasury fee, or back to you. Each step has a cap, each token has a rolling 24-hour limit, and swaps need a nonzero `min_out`. No step can name an arbitrary receiver.
-- **You can switch the bot off at any time.** `revoke_executor` deletes its key on chain.
+- **You can switch the executor off at any time.** `revoke_executor` deletes its key on chain.
 - **Deposit or withdraw from any chain** through NEAR Intents 1Click.
 
-## Threat model: what a leaked bot key can do
+## Threat model: what a leaked executor key can do
 
-| An attacker with the bot's key… | Result | Enforced at |
+| An attacker with the executor's key… | Result | Enforced at |
 |---|---|---|
 | sends funds to their own account | ❌ impossible: no step type has a receiver field | `contracts/account/src/step.rs:4` |
 | calls any other method (`withdraw`, `set_*`, …) | ❌ the key only allows `execute_step` | `contracts/factory/src/lib.rs:108` |
@@ -59,25 +59,25 @@ Automated DeFi strategies need a bot that signs transactions. Usually that means
 | swaps through an attacker's pool | ❌ `pool not whitelisted`; swaps also need `min_out` > 0 | `contracts/account/src/policy.rs:64` |
 | moves more than the cap in one step | ❌ `over cap` | `contracts/account/src/policy.rs:29` |
 | repeats steps to drain over time | ❌ `over daily cap`: at most `daily_steps` × cap per token in **any** 24 hours (default 10), and at most 64 steps | `contracts/account/src/limit.rs:12` |
-| keeps acting after you notice | ❌ `revoke_executor` deletes the key, so the bot can't sign at all; a contract flag (`executor revoked`) blocks it as a backup | `contracts/account/src/owner.rs:109` |
+| keeps acting after you notice | ❌ `revoke_executor` deletes the key, so the executor can't sign at all; a contract flag (`executor revoked`) blocks it as a backup | `contracts/account/src/owner.rs:109` |
 | pays itself through treasury fees | ❌ fees are capped at 0.4% of the token's 24h limit, a constant nobody can raise | `contracts/account/src/policy.rs:54` |
 | accepts a poor price on a whitelisted pool | ⚠️ price slippage on whitelisted pools, bounded by the per-step and 24h caps (see Known limits) | — |
 
-### Limits of the bot's key
+### Limits of the executor's key
 
 - It is a function-call key for one receiver (your account) and one method (`execute_step`), with a 1 NEAR gas allowance (`contracts/factory/src/lib.rs:17`). It cannot transfer NEAR, add keys, deploy code or call any other method.
 - Your Nearly account holds no full-access key. You never get locked out: every owner method (`withdraw`, `set_*`, `revoke_executor`) checks that the caller is your wallet (`predecessor == owner`, plus 1 yoctoNEAR so it needs a full-access signature), so you act from your own wallet.
-- If the gas allowance runs out, or after `revoke_executor`, the bot simply stops. Funds stay in your account and you can still `withdraw`. Re-enabling the bot after a revoke is not supported yet.
+- If the gas allowance runs out, or after `revoke_executor`, the executor simply stops. Funds stay in your account and you can still `withdraw`. Re-enabling the executor after a revoke is not supported yet.
 
 ## How NEAR is used
 
 | NEAR feature | Where | Why it matters |
 |---|---|---|
 | Sub-accounts + factory | `contracts/factory/src/lib.rs:72` `create_account` | Each user gets their own on-chain account; there's no shared vault |
-| Function-call access keys | `contracts/factory/src/lib.rs:108` `add_access_key_allowance(…, "execute_step")` | The bot can call one method, with capped gas |
+| Function-call access keys | `contracts/factory/src/lib.rs:108` `add_access_key_allowance(…, "execute_step")` | The executor can call one method, with capped gas |
 | On-chain policy engine | `contracts/account/src/policy.rs:16` `assert_executor`, `:29` `assert_cap`, `:45` `check_step`; `limit.rs:12` rolling 24h window | Limits are enforced by the contract, not the server |
 | No-receiver step type | `contracts/account/src/step.rs:4` | Fund destinations are fixed in code |
-| Owner controls | `contracts/account/src/owner.rs:94` `set_daily_steps`, `:102` `set_pools`, `:109` `revoke_executor` | The owner sets the limits and pools, and can remove the bot's key in one call |
+| Owner controls | `contracts/account/src/owner.rs:94` `set_daily_steps`, `:102` `set_pools`, `:109` `revoke_executor` | The owner sets the limits and pools, and can remove the executor's key in one call |
 | NEAR Intents 1Click | `internal/shared/intents/`, `services/api/internal/api/intents.go` | Deposit from or withdraw to other chains |
 | Rhea lending + DEX, liquid staking | `contracts/deployments/testnet.json` | Where the yield comes from |
 | NEP-413 sign-in | `services/api/internal/auth/` | Wallet login without passwords |
@@ -95,7 +95,7 @@ flowchart TD
   API --> M[market-data + history · Go]
   API <-->|any-chain in/out| I[NEAR Intents 1Click]
   S --> X[executor · Rust<br/>function-call key]
-  F -->|deploys + adds bot key| A[your account contract<br/>token + pool whitelist · caps · 24h limit]
+  F -->|deploys + adds executor key| A[your account contract<br/>token + pool whitelist · caps · 24h limit]
   X -->|execute_step only| A
   A --> L[(Rhea lending)]
   A --> D[(Rhea DEX)]
@@ -110,7 +110,7 @@ Funds leave your account only to these venues, the treasury fee, or back to you 
 | Path | Role |
 |---|---|
 | `contracts/account` | Per-user account contract: holds funds, enforces the policy on chain |
-| `contracts/factory` | Creates user sub-accounts, deploys `account`, adds the bot's function-call key |
+| `contracts/factory` | Creates user sub-accounts, deploys `account`, adds the executor's function-call key |
 | `executor/` | Rust signer: turns planned steps into `execute_step` transactions; adds an off-chain USD cap (`MAX_STEP_USD`) and requires `min_out` on swaps |
 | `services/api` | User API: auth, baskets, deposit/withdraw, Intents quotes, schedules |
 | `services/scheduler` | DCA, recurring buys, rebalancing |
@@ -139,24 +139,42 @@ Source of truth: `contracts/deployments/testnet.json`. Check with `scripts/verif
 
 ## On-chain proof (NEAR testnet)
 
-A full run on account [`nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet`](https://testnet.nearblocks.io/address/nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet), created by the current factory. The owner is `nearly-demo-1112.testnet`; every bot step is signed only by the bot's function-call key.
+A full run on account [`nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet`](https://testnet.nearblocks.io/address/nearly-demo-1112-testnet.factory.nearly-dev-c7dc68.testnet), created by the current factory. The owner is `nearly-demo-1112.testnet`; every executor step is signed only by the executor's function-call key.
 
 | # | What | Result | Transaction |
 |---|---|---|---|
-| 1 | Owner creates a Nearly account through the factory; its only key is the bot's, limited to `execute_step` | ✅ created | [`AcmT2Cmj…`](https://testnet.nearblocks.io/txns/AcmT2CmjWurhidWAscC2zkVUMUtjwbAhjVHaVXcaXets) |
+| 1 | Owner creates a Nearly account through the factory; its only key is the executor's, limited to `execute_step` | ✅ created | [`AcmT2Cmj…`](https://testnet.nearblocks.io/txns/AcmT2CmjWurhidWAscC2zkVUMUtjwbAhjVHaVXcaXets) |
 | 2 | Owner deposits 2 wNEAR | ✅ | [`8wJpSMtw…`](https://testnet.nearblocks.io/txns/8wJpSMtwo65uDyM9XZUdqe2H5fhxsxYJQ5isCytqWBA3) |
-| 3 | Bot stakes 0.5 wNEAR into LiNEAR | ✅ position booked | [`GZZtFXZN…`](https://testnet.nearblocks.io/txns/GZZtFXZNdQqA2ZPQm8LAVKWU6LxcNJofD225kTtbo4dZ) |
-| 4 | Bot pays a 0.01 wNEAR treasury fee | ✅ | [`9t4Sywkt…`](https://testnet.nearblocks.io/txns/9t4SywktykKPNp5BP6r9adBK8jbhyLkhqr86FeXEg5aZ) |
-| 5 | Bot swaps on pool 666 (not whitelisted) | ❌ `pool not whitelisted` | [`FSssFRmH…`](https://testnet.nearblocks.io/txns/FSssFRmHQjunYwmYNH3iwAAvKvBYvQwPAuSYc5V5qhrb) |
-| 6 | Bot swaps on pool 1900 with `min_out` 0 | ❌ `zero min_out` | [`DLjC8mCY…`](https://testnet.nearblocks.io/txns/DLjC8mCYjNJikf1UENp8Zi2rGDUiCw3xBmN76mnQ38gX) |
-| 7 | Bot sends a 5 wNEAR fee (budget is 4) | ❌ `over daily cap` | [`zZqSLXzW…`](https://testnet.nearblocks.io/txns/zZqSLXzWmvi8f7xezMP9PudgrJzbHQoF3jXLLfxv9SA) |
-| 8 | Bot moves 101 wNEAR (cap is 100) | ❌ `over cap` | [`25MM4hNP…`](https://testnet.nearblocks.io/txns/25MM4hNPcqBGLmjmw8zgugmYYHBWyRNYcdNsM5Cdft1T) |
+| 3 | Executor stakes 0.5 wNEAR into LiNEAR | ✅ position booked | [`GZZtFXZN…`](https://testnet.nearblocks.io/txns/GZZtFXZNdQqA2ZPQm8LAVKWU6LxcNJofD225kTtbo4dZ) |
+| 4 | Executor pays a 0.01 wNEAR treasury fee | ✅ | [`9t4Sywkt…`](https://testnet.nearblocks.io/txns/9t4SywktykKPNp5BP6r9adBK8jbhyLkhqr86FeXEg5aZ) |
+| 5 | Executor swaps on pool 666 (not whitelisted) | ❌ `pool not whitelisted` | [`FSssFRmH…`](https://testnet.nearblocks.io/txns/FSssFRmHQjunYwmYNH3iwAAvKvBYvQwPAuSYc5V5qhrb) |
+| 6 | Executor swaps on pool 1900 with `min_out` 0 | ❌ `zero min_out` | [`DLjC8mCY…`](https://testnet.nearblocks.io/txns/DLjC8mCYjNJikf1UENp8Zi2rGDUiCw3xBmN76mnQ38gX) |
+| 7 | Executor sends a 5 wNEAR fee (budget is 4) | ❌ `over daily cap` | [`zZqSLXzW…`](https://testnet.nearblocks.io/txns/zZqSLXzWmvi8f7xezMP9PudgrJzbHQoF3jXLLfxv9SA) |
+| 8 | Executor moves 101 wNEAR (cap is 100) | ❌ `over cap` | [`25MM4hNP…`](https://testnet.nearblocks.io/txns/25MM4hNPcqBGLmjmw8zgugmYYHBWyRNYcdNsM5Cdft1T) |
 | 9 | Owner lowers the wNEAR cap to 0.3 and `daily_steps` to 1 | ✅ | [`CCctZwyk…`](https://testnet.nearblocks.io/txns/CCctZwykaMbTS1xfKh5WPTBtCMb1wRXpVbFTboiv21Ws) |
-| 10 | Bot returns 0.2 wNEAR to the owner | ✅ | [`7EHetPSc…`](https://testnet.nearblocks.io/txns/7EHetPSctACJxQnXATwf6FoafDp5Skjx4yV7zaJH4gRa) |
-| 11 | Bot returns another 0.2 wNEAR (24h total would be 0.41 > 0.3) | ❌ `over daily cap` | [`9QdgFCTs…`](https://testnet.nearblocks.io/txns/9QdgFCTssVLsnwpWu7nB8sU5ExxrbKEyUg7D59Bqi1PB) |
+| 10 | Executor returns 0.2 wNEAR to the owner | ✅ | [`7EHetPSc…`](https://testnet.nearblocks.io/txns/7EHetPSctACJxQnXATwf6FoafDp5Skjx4yV7zaJH4gRa) |
+| 11 | Executor returns another 0.2 wNEAR (24h total would be 0.41 > 0.3) | ❌ `over daily cap` | [`9QdgFCTs…`](https://testnet.nearblocks.io/txns/9QdgFCTssVLsnwpWu7nB8sU5ExxrbKEyUg7D59Bqi1PB) |
 | 12 | Owner calls `revoke_executor` | ✅ account left with 0 keys | [`3NPiufCD…`](https://testnet.nearblocks.io/txns/3NPiufCD5DvzCYpuutzN21YzU5wrgR6MsRxaBGyeso2y) |
-| 13 | Bot tries one more step | ❌ can't sign: `Access key … does not exist` | no transaction possible |
+| 13 | Executor tries one more step | ❌ can't sign: `Access key … does not exist` | no transaction possible |
 | 14 | Factory upgrade: new code + `migrate` adding the pool whitelist | ✅ | [`EWDdvv9n…`](https://testnet.nearblocks.io/txns/EWDdvv9nHfLEugj2vNuUkB99tSb1hCaGNYR6kN3RNhZN) |
+
+### Live Rhea trades
+
+A second account, [`nearly-proof-1435-testnet.factory.nearly-dev-c7dc68.testnet`](https://testnet.nearblocks.io/address/nearly-proof-1435-testnet.factory.nearly-dev-c7dc68.testnet), owned by `nearly-proof-1435.testnet`, tested end to end on testnet with our own keys. Its only key is the executor's, limited to `execute_step`.
+
+| # | What | Signed by | Result | Transaction |
+|---|---|---|---|---|
+| 1 | Owner creates the account through the factory | owner | ✅ | [`sqyN2iud…`](https://testnet.nearblocks.io/txns/sqyN2iudnpkZ3jA9RgX7g8ugyGmDofsHYG1HTvzt3TE) |
+| 2 | Owner deposits 1.5 wNEAR | owner | ✅ | [`3CTYp7XP…`](https://testnet.nearblocks.io/txns/3CTYp7XPaaHmzEUVgG5EBMwYoc39pQKLXyj8P1vzfAXg) |
+| 3 | Executor swaps 0.5 wNEAR → 6.2484 USDC on Rhea DEX pool 1900, `min_out` = quote − 1% | executor key | ✅ | [`B3EP2qkz…`](https://testnet.nearblocks.io/txns/B3EP2qkzcExz4h9ZeAnu32y7PsQZmVacoTJVtPp7QgRN) |
+| 4 | Executor supplies the 6.2484 USDC to Rhea lending | executor key | ✅ position booked | [`DWJ2JFyq…`](https://testnet.nearblocks.io/txns/DWJ2JFyqWjMKR3YkGp7JkBW3fgpf6SyYkcSvapJ5hPJE) |
+
+Rhea confirms the position:
+
+```sh
+near contract call-function as-read-only burrow.services.ref-labs.testnet get_account \
+  json-args '{"account_id":"nearly-proof-1435-testnet.factory.nearly-dev-c7dc68.testnet"}' network-config testnet now
+```
 
 Check any rejection yourself, for example the pool check:
 
@@ -170,7 +188,7 @@ An older account, from before the pool whitelist and 24h limit, also shows a liv
 
 ## Try the app (testnet)
 
-Hosted: open **https://nearly.veilocity.xyz** with a NEAR testnet wallet and follow the steps below. Nothing to install.
+Hosted: open **https://nearly.veilocity.xyz** with a NEAR testnet wallet and follow the steps below. Nothing to install. The wallet needs about 5 testnet NEAR: creating your Nearly account costs 4.52 NEAR (account storage). A fresh account from the [testnet faucet](https://near-faucet.io) is enough.
 
 To run it locally instead you need Docker, Go 1.25+, Rust + `cargo-near`, Bun, and a NEAR testnet wallet.
 
@@ -190,7 +208,7 @@ Then in the app:
 3. **Open the basket, deposit, and deploy.**
    → The executor runs the steps. **Portfolio → Executions** lists each run with its transaction hash.
 4. **Go to Portfolio → Revoke.**
-   → The bot's key is deleted from your account, so the bot can no longer sign any transaction for it.
+   → The executor's key is deleted from your account, so the executor can no longer sign any transaction for it.
 5. **Go to Risk.**
    → You see your exposure by venue and token.
 
@@ -203,7 +221,7 @@ Every claim maps to a test you can run:
 | Claim | Test (`contracts/account/src/tests.rs`) |
 |---|---|
 | No step can send funds to an arbitrary account | `no_step_can_name_a_receiver` (line 440) |
-| Only the bot's key, signing on the account itself, can run steps | `executor_must_be_self`, `executor_wrong_key` (line 179) |
+| Only the executor's key, signing on the account itself, can run steps | `executor_must_be_self`, `executor_wrong_key` (line 179) |
 | Steps over the cap are rejected | `over_cap_rejected` (line 190), `stake_over_near_cap_rejected` |
 | Repeated steps stop at the 24h limit, measured as a rolling window, not calendar days | `over_daily_cap_rejected` (line 310), `daily_cap_is_rolling_not_calendar` (line 342), `daily_cap_resets_next_day`, `spend_log_is_bounded` |
 | Swaps only through whitelisted pools, never with `min_out` of 0 | `swap_on_unknown_pool_rejected` (line 376), `swap_without_min_out_rejected` (line 384) |
@@ -224,7 +242,7 @@ CI (`.github/workflows/ci.yml`) runs Go vet + tests (unit and integration), exec
 
 ## Known limits
 
-- The bot sets each swap's `min_out` from a live quote. A compromised bot could accept a worse price on a whitelisted pool, but only within the per-step and 24h limits.
+- The executor sets each swap's `min_out` from a live quote. A compromised executor could accept a worse price on a whitelisted pool, but only within the per-step and 24h limits.
 - NEAR Intents has no testnet, so live cross-chain transfers are mainnet-only. On testnet you get dry-run quotes.
 - Live APYs come from testnet venues and look odd (thin testnet Rhea markets show near-zero lending rates, LiNEAR testnet staking shows very high ones). Backtests use the historical series served by `history`, not these spot rates.
 - Perps and limit orders are out of scope.
