@@ -22,4 +22,4 @@ cd ../ansible && ansible-playbook playbook.yml                  # build, ship, s
 terraform -chdir=../terraform destroy                           # tear down
 ```
 
-Reuse an existing bot key: `-e executor_private_key=ed25519:... -e executor_public_key=ed25519:...`.
+Reuse an existing executor key: `-e executor_private_key=ed25519:... -e executor_public_key=ed25519:...`.
