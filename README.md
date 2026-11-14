@@ -20,6 +20,8 @@ Built at NEAR HACKATHON (2026-11-01 → 2026-11-14). Tracks: **`defi`** and **`s
 
 **Live app (NEAR testnet): https://nearly.veilocity.xyz**
 
+**Demo video: https://x.com/nearlybaskets/status/2121635949365047409**
+
 ## For judges: check it in 2 minutes
 
 No Docker or secrets needed for these:
